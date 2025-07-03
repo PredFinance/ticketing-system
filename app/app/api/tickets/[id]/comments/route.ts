@@ -2,13 +2,13 @@ import { authenticateUser } from "@/lib/auth"
 import { createSupabaseServerClient } from "@/lib/supabase"
 import { type NextRequest, NextResponse } from "next/server"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { user, error } = await authenticateUser()
   if (error) return error
 
   try {
     const supabase = await createSupabaseServerClient()
-    const { id } = params
+    const { id } = await params // Fix for Next.js 15
     const { content, isInternal } = await request.json()
 
     if (!content?.trim()) {
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .from("ticket_comments")
       .insert({
         ticket_id: ticket.id,
-        user_id: user!.id, // Use integer ID
+        user_id: user!.id,
         content,
         is_internal: isInternal || false,
       })
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Update ticket's updated_at
     await supabase.from("tickets").update({ updated_at: new Date().toISOString() }).eq("id", ticket.id)
 
-    // Log activity using integer ID
+    // Log activity
     await supabase.from("ticket_activities").insert({
       ticket_id: ticket.id,
       user_id: user!.id,

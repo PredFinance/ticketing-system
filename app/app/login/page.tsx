@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useRouter } from "next/navigation"
@@ -30,12 +29,12 @@ export default function LoginPage() {
     setError("")
 
     try {
-      const success = await login(email, password)
-      if (success) {
+      const result = await login(email, password)
+      if (result.success) {
         toast.success("Welcome back!")
         router.push("/dashboard")
       } else {
-        setError("Invalid email or password")
+        setError(result.message || "Invalid email or password")
         toast.error("Login failed")
       }
     } catch (error) {

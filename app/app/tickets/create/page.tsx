@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useRouter } from "next/navigation"
@@ -16,14 +15,14 @@ import { Ticket, Upload, X, AlertCircle, Flag, Building, Tag, ArrowLeft, FileTex
 import toast from "react-hot-toast"
 
 interface Category {
-  id: string
+  id: number
   name: string
   description: string
   color: string
 }
 
 interface Department {
-  id: string
+  id: number
   name: string
   description: string
 }
@@ -65,23 +64,21 @@ export default function CreateTicketPage() {
 
   const fetchFormData = async () => {
     try {
-      // Mock data - replace with actual API calls
-      setCategories([
-        { id: "1", name: "Technical Support", description: "Technical issues and support requests", color: "#3b82f6" },
-        { id: "2", name: "Bug Report", description: "Software bugs and issues", color: "#ef4444" },
-        { id: "3", name: "Feature Request", description: "New feature requests and enhancements", color: "#10b981" },
-        { id: "4", name: "General Inquiry", description: "General questions and inquiries", color: "#6366f1" },
-        { id: "5", name: "Account Issues", description: "Account related problems", color: "#f59e0b" },
-      ])
+      // Fetch categories
+      const categoriesResponse = await fetch("/api/categories", { credentials: "include" })
+      if (categoriesResponse.ok) {
+        const categoriesData = await categoriesResponse.json()
+        setCategories(categoriesData)
+      }
 
-      setDepartments([
-        { id: "1", name: "IT Support", description: "Information Technology support and maintenance" },
-        { id: "2", name: "Customer Service", description: "Customer support and service" },
-        { id: "3", name: "Development", description: "Software development and engineering" },
-        { id: "4", name: "Quality Assurance", description: "Testing and quality assurance" },
-      ])
+      // Fetch departments
+      const departmentsResponse = await fetch("/api/admin/departments", { credentials: "include" })
+      if (departmentsResponse.ok) {
+        const departmentsData = await departmentsResponse.json()
+        setDepartments(departmentsData)
+      }
     } catch (error) {
-      toast.error("Failed to load form data")
+      console.error("Failed to load form data:", error)
     }
   }
 
@@ -197,7 +194,6 @@ export default function CreateTicketPage() {
     }
 
     try {
-      // Create FormData for file uploads
       const submitData = new FormData()
       submitData.append("title", formData.title)
       submitData.append("description", formData.description)
@@ -205,13 +201,13 @@ export default function CreateTicketPage() {
       submitData.append("departmentId", formData.departmentId)
       submitData.append("priority", formData.priority)
 
-      // Add files
-      attachedFiles.forEach((attachedFile, index) => {
-        submitData.append(`files`, attachedFile.file)
+      attachedFiles.forEach((attachedFile) => {
+        submitData.append("files", attachedFile.file)
       })
 
       const response = await fetch("/api/tickets/create", {
         method: "POST",
+        credentials: "include",
         body: submitData,
       })
 
@@ -317,7 +313,7 @@ export default function CreateTicketPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
+                          <SelectItem key={category.id} value={category.id.toString()}>
                             <div className="flex items-center">
                               <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
                               {category.name}
@@ -341,7 +337,7 @@ export default function CreateTicketPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {departments.map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id}>
+                          <SelectItem key={dept.id} value={dept.id.toString()}>
                             {dept.name}
                           </SelectItem>
                         ))}

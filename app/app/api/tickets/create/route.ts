@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient()
 
+    // Parse form data
     const formData = await request.formData()
     const title = formData.get("title") as string
     const description = formData.get("description") as string
@@ -20,10 +21,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Title and description are required" }, { status: 400 })
     }
 
-    // Generate unique ticket number
+    // Generate ticket number
     const ticketNumber = `TKT-${Date.now().toString().slice(-6)}`
 
-    // Create ticket using integer IDs
+    // Create ticket
     const { data: ticket, error: ticketError } = await supabase
       .from("tickets")
       .insert({
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
         department_id: departmentId ? Number(departmentId) : null,
         priority: priority as any,
         status: "open",
-        created_by: user!.id, // Use integer ID from users table
+        created_by: user!.id, // Use integer ID
       })
       .select()
       .single()
@@ -45,10 +46,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Failed to create ticket" }, { status: 500 })
     }
 
+    // Handle file uploads (simplified for now)
+    const files = formData.getAll("files") as File[]
+    if (files.length > 0) {
+      // TODO: Implement file upload to storage and save attachment records
+      console.log(`${files.length} files to upload for ticket ${ticketNumber}`)
+    }
+
     // Add initial system message
     await supabase.from("ticket_comments").insert({
       ticket_id: ticket.id,
-      user_id: user!.id, // Use integer ID
+      user_id: user!.id,
       content: `Ticket created with priority: ${priority}`,
       is_system_message: true,
     })
@@ -56,13 +64,13 @@ export async function POST(request: NextRequest) {
     // Add user as watcher
     await supabase.from("ticket_watchers").insert({
       ticket_id: ticket.id,
-      user_id: user!.id, // Use integer ID
+      user_id: user!.id,
     })
 
     // Log activity
     await supabase.from("ticket_activities").insert({
       ticket_id: ticket.id,
-      user_id: user!.id, // Use integer ID
+      user_id: user!.id,
       action: "created",
       description: "Ticket created",
     })

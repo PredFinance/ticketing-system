@@ -14,27 +14,34 @@ import toast from "react-hot-toast"
 
 interface TicketData {
   id: number
-  ticketNumber: string
+  ticket_number: string
   title: string
   status: "open" | "in_progress" | "pending" | "resolved" | "closed"
   priority: "low" | "medium" | "high" | "urgent"
-  category: string
-  assignedTo?: string
-  createdAt: string
-  lastUpdate: string
-  commentsCount: number
+  created_at: string
+  updated_at: string
+  creator: { first_name: string; last_name: string }
+  assignee?: { first_name: string; last_name: string }
+  category?: { name: string; color: string }
+  comments_count: Array<any>
+}
+
+interface DashboardStats {
+  total: number
+  open: number
+  inProgress: number
+  resolved: number
 }
 
 export default function DashboardPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const [tickets, setTickets] = useState<TicketData[]>([])
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     total: 0,
     open: 0,
     inProgress: 0,
     resolved: 0,
-    myTickets: 0,
   })
   const [searchTerm, setSearchTerm] = useState("")
   const [loadingTickets, setLoadingTickets] = useState(true)
@@ -43,9 +50,7 @@ export default function DashboardPage() {
     if (!loading && !user) {
       router.push("/login")
     } else if (user) {
-      // Check if user is pending approval
       if (user.status === "pending") {
-        // Don't redirect, just show pending approval component
         setLoadingTickets(false)
         return
       }
@@ -55,65 +60,25 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
-      // Mock data - replace with actual API calls
-      const mockTickets: TicketData[] = [
-        {
-          id: 1,
-          ticketNumber: "TKT-001",
-          title: "Login page not loading properly",
-          status: "open",
-          priority: "high",
-          category: "Technical Support",
-          assignedTo: "John Supervisor",
-          createdAt: "2024-01-15T10:30:00Z",
-          lastUpdate: "2024-01-15T14:20:00Z",
-          commentsCount: 3,
-        },
-        {
-          id: 2,
-          ticketNumber: "TKT-002",
-          title: "Request for new feature in dashboard",
-          status: "in_progress",
-          priority: "medium",
-          category: "Feature Request",
-          assignedTo: "Jane Developer",
-          createdAt: "2024-01-14T09:15:00Z",
-          lastUpdate: "2024-01-15T11:45:00Z",
-          commentsCount: 7,
-        },
-        {
-          id: 3,
-          ticketNumber: "TKT-003",
-          title: "Email notifications not working",
-          status: "resolved",
-          priority: "urgent",
-          category: "Bug Report",
-          assignedTo: "System Admin",
-          createdAt: "2024-01-13T16:20:00Z",
-          lastUpdate: "2024-01-14T10:30:00Z",
-          commentsCount: 5,
-        },
-        {
-          id: 4,
-          ticketNumber: "TKT-004",
-          title: "Account access issues",
-          status: "pending",
-          priority: "high",
-          category: "Account Issues",
-          createdAt: "2024-01-15T08:45:00Z",
-          lastUpdate: "2024-01-15T08:45:00Z",
-          commentsCount: 1,
-        },
-      ]
-
-      setTickets(mockTickets)
-      setStats({
-        total: mockTickets.length,
-        open: mockTickets.filter((t) => t.status === "open").length,
-        inProgress: mockTickets.filter((t) => t.status === "in_progress").length,
-        resolved: mockTickets.filter((t) => t.status === "resolved").length,
-        myTickets: user?.role === "user" ? mockTickets.length : mockTickets.filter((t) => t.assignedTo).length,
+      const response = await fetch("/api/tickets", {
+        credentials: "include",
       })
+
+      if (response.ok) {
+        const ticketsData = await response.json()
+        setTickets(ticketsData)
+
+        // Calculate stats from actual data
+        const stats = {
+          total: ticketsData.length,
+          open: ticketsData.filter((t: TicketData) => t.status === "open").length,
+          inProgress: ticketsData.filter((t: TicketData) => t.status === "in_progress").length,
+          resolved: ticketsData.filter((t: TicketData) => t.status === "resolved").length,
+        }
+        setStats(stats)
+      } else {
+        toast.error("Failed to load dashboard data")
+      }
     } catch (error) {
       toast.error("Failed to load dashboard data")
     } finally {
@@ -165,8 +130,8 @@ export default function DashboardPage() {
   const filteredTickets = tickets.filter(
     (ticket) =>
       ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.category.toLowerCase().includes(searchTerm.toLowerCase()),
+      ticket.ticket_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (ticket.category?.name || "").toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   if (loading || loadingTickets) {
@@ -298,10 +263,6 @@ export default function DashboardPage() {
             <Ticket className="w-4 h-4 mr-2" />
             View All Tickets
           </Button>
-          <Button variant="outline" onClick={() => router.push("/chat")} className="btn-3d">
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Team Chat
-          </Button>
         </div>
 
         {/* Recent Tickets */}
@@ -342,11 +303,11 @@ export default function DashboardPage() {
                   </Button>
                 </div>
               ) : (
-                filteredTickets.map((ticket) => (
+                filteredTickets.slice(0, 5).map((ticket) => (
                   <div
                     key={ticket.id}
                     className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/tickets/${ticket.ticketNumber}`)}
+                    onClick={() => router.push(`/tickets/${ticket.ticket_number}`)}
                   >
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -354,7 +315,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <div className="flex items-center space-x-2 mb-1">
-                          <p className="font-medium text-gray-900">{ticket.ticketNumber}</p>
+                          <p className="font-medium text-gray-900">{ticket.ticket_number}</p>
                           <Badge className={`text-xs ${getStatusColor(ticket.status)}`}>
                             {ticket.status.replace("_", " ")}
                           </Badge>
@@ -362,17 +323,21 @@ export default function DashboardPage() {
                         </div>
                         <p className="text-sm text-gray-600 mb-1">{ticket.title}</p>
                         <div className="flex items-center space-x-4 text-xs text-gray-500">
-                          <span>{ticket.category}</span>
-                          {ticket.assignedTo && <span>Assigned to {ticket.assignedTo}</span>}
-                          <span>Updated {formatDate(ticket.lastUpdate)}</span>
+                          {ticket.category && <span>{ticket.category.name}</span>}
+                          {ticket.assignee && (
+                            <span>
+                              Assigned to {ticket.assignee.first_name} {ticket.assignee.last_name}
+                            </span>
+                          )}
+                          <span>Updated {formatDate(ticket.updated_at)}</span>
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      {ticket.commentsCount > 0 && (
+                      {ticket.comments_count.length > 0 && (
                         <div className="flex items-center text-gray-500">
                           <MessageSquare className="w-4 h-4 mr-1" />
-                          <span className="text-sm">{ticket.commentsCount}</span>
+                          <span className="text-sm">{ticket.comments_count.length}</span>
                         </div>
                       )}
                     </div>

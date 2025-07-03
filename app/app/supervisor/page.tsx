@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Ticket, Clock, CheckCircle, AlertCircle, BarChart3 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Users, Ticket, Clock, CheckCircle, AlertCircle, BarChart3, Search, Eye } from "lucide-react"
 import toast from "react-hot-toast"
 
 interface SupervisorStats {
@@ -22,7 +23,7 @@ interface SupervisorStats {
 }
 
 interface TicketData {
-  id: string
+  id: number
   ticket_number: string
   title: string
   status: string
@@ -30,15 +31,16 @@ interface TicketData {
   created_at: string
   creator: { first_name: string; last_name: string }
   assignee?: { first_name: string; last_name: string }
-  category: { name: string; color: string }
+  category?: { name: string; color: string }
 }
 
 interface TeamMember {
-  id: string
+  id: number
   first_name: string
   last_name: string
   email: string
   status: string
+  role: string
 }
 
 export default function SupervisorDashboard() {
@@ -54,6 +56,8 @@ export default function SupervisorDashboard() {
   })
   const [tickets, setTickets] = useState<TicketData[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [loadingData, setLoadingData] = useState(true)
 
   useEffect(() => {
@@ -69,14 +73,33 @@ export default function SupervisorDashboard() {
 
   const fetchSupervisorData = async () => {
     try {
-      const response = await fetch("/api/supervisor/dashboard")
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data.stats)
-        setTickets(data.tickets)
-        setTeamMembers(data.teamMembers)
-      } else {
-        toast.error("Failed to load supervisor data")
+      // Fetch tickets for supervisor's department
+      const ticketsResponse = await fetch("/api/tickets", { credentials: "include" })
+      if (ticketsResponse.ok) {
+        const ticketsData = await ticketsResponse.json()
+        setTickets(ticketsData)
+
+        // Calculate stats
+        const stats = {
+          totalTickets: ticketsData.length,
+          openTickets: ticketsData.filter((t: TicketData) => t.status === "open").length,
+          inProgressTickets: ticketsData.filter((t: TicketData) => t.status === "in_progress").length,
+          resolvedTickets: ticketsData.filter((t: TicketData) => t.status === "resolved").length,
+          unassignedTickets: ticketsData.filter((t: TicketData) => !t.assignee).length,
+          teamMembers: 0, // Will be updated when we fetch team members
+        }
+        setStats(stats)
+      }
+
+      // Fetch team members (users in the same department)
+      const usersResponse = await fetch("/api/admin/users", { credentials: "include" })
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json()
+        const departmentMembers = usersData.filter(
+          (u: any) => u.department_id === user?.departmentId && u.status === "active",
+        )
+        setTeamMembers(departmentMembers)
+        setStats((prev) => ({ ...prev, teamMembers: departmentMembers.length }))
       }
     } catch (error) {
       toast.error("Failed to load supervisor data")
@@ -85,12 +108,13 @@ export default function SupervisorDashboard() {
     }
   }
 
-  const assignTicket = async (ticketId: string, userId: string) => {
+  const assignTicket = async (ticketNumber: string, userId: string) => {
     try {
-      const response = await fetch(`/api/tickets/${ticketId}`, {
+      const response = await fetch(`/api/tickets/${ticketNumber}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigned_to: userId }),
+        credentials: "include",
+        body: JSON.stringify({ assigned_to: Number.parseInt(userId) }),
       })
 
       if (response.ok) {
@@ -121,6 +145,21 @@ export default function SupervisorDashboard() {
     }
   }
 
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "low":
+        return "priority-low"
+      case "medium":
+        return "priority-medium"
+      case "high":
+        return "priority-high"
+      case "urgent":
+        return "priority-urgent"
+      default:
+        return "bg-gray-100 text-gray-700"
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
@@ -129,6 +168,16 @@ export default function SupervisorDashboard() {
       minute: "2-digit",
     })
   }
+
+  const filteredTickets = tickets.filter((ticket) => {
+    const matchesSearch =
+      ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.ticket_number.toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesStatus = statusFilter === "all" || ticket.status === statusFilter
+
+    return matchesSearch && matchesStatus
+  })
 
   if (loading || loadingData) {
     return (
@@ -236,15 +285,42 @@ export default function SupervisorDashboard() {
           <TabsContent value="tickets" className="space-y-6">
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Ticket className="w-5 h-5 mr-2 text-blue-600" />
-                  Department Tickets ({stats.totalTickets})
-                </CardTitle>
-                <CardDescription>Manage and assign tickets within your department</CardDescription>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="flex items-center">
+                      <Ticket className="w-5 h-5 mr-2 text-blue-600" />
+                      Department Tickets ({filteredTickets.length})
+                    </CardTitle>
+                    <CardDescription>Manage and assign tickets within your department</CardDescription>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Search tickets..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 w-64"
+                      />
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {tickets.map((ticket) => (
+                  {filteredTickets.map((ticket) => (
                     <div key={ticket.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -253,8 +329,16 @@ export default function SupervisorDashboard() {
                             <Badge className={`text-xs ${getStatusColor(ticket.status)}`}>
                               {ticket.status.replace("_", " ")}
                             </Badge>
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ticket.category.color }} />
-                            <span className="text-sm text-gray-600">{ticket.category.name}</span>
+                            <Badge className={`text-xs ${getPriorityColor(ticket.priority)}`}>{ticket.priority}</Badge>
+                            {ticket.category && (
+                              <>
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: ticket.category.color }}
+                                />
+                                <span className="text-sm text-gray-600">{ticket.category.name}</span>
+                              </>
+                            )}
                           </div>
                           <p className="text-gray-900 font-medium mb-1">{ticket.title}</p>
                           <div className="flex items-center space-x-4 text-sm text-gray-500">
@@ -277,7 +361,7 @@ export default function SupervisorDashboard() {
                               </SelectTrigger>
                               <SelectContent>
                                 {teamMembers.map((member) => (
-                                  <SelectItem key={member.id} value={member.id}>
+                                  <SelectItem key={member.id} value={member.id.toString()}>
                                     {member.first_name} {member.last_name}
                                   </SelectItem>
                                 ))}
@@ -289,6 +373,7 @@ export default function SupervisorDashboard() {
                             size="sm"
                             onClick={() => router.push(`/tickets/${ticket.ticket_number}`)}
                           >
+                            <Eye className="w-4 h-4 mr-1" />
                             View
                           </Button>
                         </div>
@@ -328,7 +413,12 @@ export default function SupervisorDashboard() {
                           <h3 className="font-medium text-gray-900">
                             {member.first_name} {member.last_name}
                           </h3>
-                          <p className="text-sm text-gray-600">{member.email}</p>
+                          <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <span>{member.email}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {member.role}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">

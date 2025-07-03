@@ -10,7 +10,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Users,
   Shield,
@@ -23,47 +32,68 @@ import {
   Ticket,
   Clock,
   CheckCircle,
-  AlertCircle,
+  Plus,
+  Edit,
+  Trash2,
+  Settings,
 } from "lucide-react"
 import toast from "react-hot-toast"
 
-interface PendingUser {
-  id: string
-  firstName: string
-  lastName: string
+interface User {
+  id: number
+  first_name: string
+  last_name: string
   email: string
-  departmentId?: string
-  departmentName?: string
-  createdAt: string
-  status: "pending" | "active" | "inactive" | "suspended"
+  role: string
+  status: string
+  department_id?: number
+  created_at: string
+  department?: { name: string }
+}
+
+interface Department {
+  id: number
+  name: string
+  description: string
+  supervisor_id?: number
+  is_active: boolean
+  created_at: string
+  supervisor?: { first_name: string; last_name: string; email: string }
+  user_count: Array<any>
 }
 
 interface SystemStats {
-  totalUsers: number
-  pendingUsers: number
-  activeUsers: number
-  totalTickets: number
-  openTickets: number
-  resolvedTickets: number
-  avgResolutionTime: string
+  users: {
+    total: number
+    pending: number
+    active: number
+    inactive: number
+    suspended: number
+  }
+  tickets: {
+    total: number
+    open: number
+    in_progress: number
+    pending: number
+    resolved: number
+    closed: number
+  }
 }
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth()
   const router = useRouter()
-  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [stats, setStats] = useState<SystemStats>({
-    totalUsers: 0,
-    pendingUsers: 0,
-    activeUsers: 0,
-    totalTickets: 0,
-    openTickets: 0,
-    resolvedTickets: 0,
-    avgResolutionTime: "0h",
+    users: { total: 0, pending: 0, active: 0, inactive: 0, suspended: 0 },
+    tickets: { total: 0, open: 0, in_progress: 0, pending: 0, resolved: 0, closed: 0 },
   })
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [loadingData, setLoadingData] = useState(true)
+  const [newDepartment, setNewDepartment] = useState({ name: "", description: "", supervisorId: "" })
+  const [showCreateDept, setShowCreateDept] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -78,50 +108,26 @@ export default function AdminDashboard() {
 
   const fetchAdminData = async () => {
     try {
-      // Mock data - replace with actual API calls
-      const mockPendingUsers: PendingUser[] = [
-        {
-          id: "1",
-          firstName: "John",
-          lastName: "Doe",
-          email: "john.doe@company.com",
-          departmentId: "1",
-          departmentName: "IT Support",
-          createdAt: "2024-01-15T10:30:00Z",
-          status: "pending",
-        },
-        {
-          id: "2",
-          firstName: "Jane",
-          lastName: "Smith",
-          email: "jane.smith@company.com",
-          departmentId: "2",
-          departmentName: "Customer Service",
-          createdAt: "2024-01-14T14:20:00Z",
-          status: "pending",
-        },
-        {
-          id: "3",
-          firstName: "Mike",
-          lastName: "Johnson",
-          email: "mike.johnson@company.com",
-          departmentId: "3",
-          departmentName: "Development",
-          createdAt: "2024-01-13T09:15:00Z",
-          status: "pending",
-        },
-      ]
+      // Fetch stats
+      const statsResponse = await fetch("/api/admin/stats", { credentials: "include" })
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json()
+        setStats(statsData)
+      }
 
-      setPendingUsers(mockPendingUsers)
-      setStats({
-        totalUsers: 25,
-        pendingUsers: mockPendingUsers.length,
-        activeUsers: 22,
-        totalTickets: 156,
-        openTickets: 23,
-        resolvedTickets: 133,
-        avgResolutionTime: "2.5h",
-      })
+      // Fetch users
+      const usersResponse = await fetch("/api/admin/users", { credentials: "include" })
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json()
+        setUsers(usersData)
+      }
+
+      // Fetch departments
+      const deptResponse = await fetch("/api/admin/departments", { credentials: "include" })
+      if (deptResponse.ok) {
+        const deptData = await deptResponse.json()
+        setDepartments(deptData)
+      }
     } catch (error) {
       toast.error("Failed to load admin data")
     } finally {
@@ -129,26 +135,52 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleUserApproval = async (userId: string, action: "approve" | "reject") => {
+  const handleUserApproval = async (userId: number, action: "approve" | "reject") => {
     try {
-      // Mock API call - replace with actual implementation
       const response = await fetch(`/api/admin/users/${userId}/${action}`, {
         method: "POST",
+        credentials: "include",
       })
 
       if (response.ok) {
-        setPendingUsers((prev) => prev.filter((user) => user.id !== userId))
-        setStats((prev) => ({
-          ...prev,
-          pendingUsers: prev.pendingUsers - 1,
-          activeUsers: action === "approve" ? prev.activeUsers + 1 : prev.activeUsers,
-        }))
         toast.success(`User ${action === "approve" ? "approved" : "rejected"} successfully`)
+        fetchAdminData()
       } else {
         toast.error(`Failed to ${action} user`)
       }
     } catch (error) {
       toast.error(`Failed to ${action} user`)
+    }
+  }
+
+  const createDepartment = async () => {
+    if (!newDepartment.name.trim()) {
+      toast.error("Department name is required")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/admin/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: newDepartment.name,
+          description: newDepartment.description,
+          supervisorId: newDepartment.supervisorId || null,
+        }),
+      })
+
+      if (response.ok) {
+        toast.success("Department created successfully")
+        setNewDepartment({ name: "", description: "", supervisorId: "" })
+        setShowCreateDept(false)
+        fetchAdminData()
+      } else {
+        toast.error("Failed to create department")
+      }
+    } catch (error) {
+      toast.error("Failed to create department")
     }
   }
 
@@ -162,16 +194,18 @@ export default function AdminDashboard() {
     })
   }
 
-  const filteredUsers = pendingUsers.filter((user) => {
+  const filteredUsers = users.filter((user) => {
     const matchesSearch =
-      user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesStatus = statusFilter === "all" || user.status === statusFilter
 
     return matchesSearch && matchesStatus
   })
+
+  const pendingUsers = users.filter((user) => user.status === "pending")
 
   if (loading || loadingData) {
     return (
@@ -232,7 +266,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Total Users</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.users.total}</p>
                 </div>
               </div>
             </CardContent>
@@ -246,7 +280,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Pending Approval</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.pendingUsers}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.users.pending}</p>
                 </div>
               </div>
             </CardContent>
@@ -260,7 +294,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Active Users</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.activeUsers}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.users.active}</p>
                 </div>
               </div>
             </CardContent>
@@ -274,7 +308,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Total Tickets</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalTickets}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.tickets.total}</p>
                 </div>
               </div>
             </CardContent>
@@ -292,76 +326,46 @@ export default function AdminDashboard() {
 
           {/* User Management Tab */}
           <TabsContent value="users" className="space-y-6">
-            <Card className="shadow-lg border-0">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="flex items-center">
-                      <UserCheck className="w-5 h-5 mr-2 text-orange-600" />
-                      Pending User Approvals ({stats.pendingUsers})
-                    </CardTitle>
-                    <CardDescription>Review and approve new user registrations</CardDescription>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Search users..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-64"
-                      />
-                    </div>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {filteredUsers.length === 0 ? (
-                  <div className="text-center py-8">
-                    <UserCheck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">No pending user approvals</p>
-                  </div>
-                ) : (
+            {/* Pending Approvals */}
+            {pendingUsers.length > 0 && (
+              <Card className="shadow-lg border-0">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <UserCheck className="w-5 h-5 mr-2 text-orange-600" />
+                    Pending User Approvals ({pendingUsers.length})
+                  </CardTitle>
+                  <CardDescription>Review and approve new user registrations</CardDescription>
+                </CardHeader>
+                <CardContent>
                   <div className="space-y-4">
-                    {filteredUsers.map((pendingUser) => (
+                    {pendingUsers.map((pendingUser) => (
                       <div key={pendingUser.id} className="border border-gray-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4">
                             <Avatar className="w-12 h-12">
                               <AvatarFallback className="bg-gray-100 text-gray-600">
-                                {pendingUser.firstName[0]}
-                                {pendingUser.lastName[0]}
+                                {pendingUser.first_name[0]}
+                                {pendingUser.last_name[0]}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <h3 className="font-medium text-gray-900">
-                                {pendingUser.firstName} {pendingUser.lastName}
+                                {pendingUser.first_name} {pendingUser.last_name}
                               </h3>
                               <div className="flex items-center space-x-4 text-sm text-gray-500 mt-1">
                                 <span className="flex items-center">
                                   <Mail className="w-4 h-4 mr-1" />
                                   {pendingUser.email}
                                 </span>
-                                {pendingUser.departmentName && (
+                                {pendingUser.department && (
                                   <span className="flex items-center">
                                     <Building className="w-4 h-4 mr-1" />
-                                    {pendingUser.departmentName}
+                                    {pendingUser.department.name}
                                   </span>
                                 )}
                                 <span className="flex items-center">
                                   <Calendar className="w-4 h-4 mr-1" />
-                                  {formatDate(pendingUser.createdAt)}
+                                  {formatDate(pendingUser.created_at)}
                                 </span>
                               </div>
                             </div>
@@ -390,53 +394,299 @@ export default function AdminDashboard() {
                       </div>
                     ))}
                   </div>
-                )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* All Users */}
+            <Card className="shadow-lg border-0">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>All Users ({users.length})</CardTitle>
+                    <CardDescription>Manage all system users</CardDescription>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Search users..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 w-64"
+                      />
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {filteredUsers.map((user) => (
+                    <div key={user.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <Avatar className="w-10 h-10">
+                            <AvatarFallback className="bg-gray-100 text-gray-600">
+                              {user.first_name[0]}
+                              {user.last_name[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h3 className="font-medium text-gray-900">
+                              {user.first_name} {user.last_name}
+                            </h3>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <span>{user.email}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {user.role}
+                              </Badge>
+                              {user.department && <span>{user.department.name}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge
+                            className={
+                              user.status === "active"
+                                ? "status-resolved"
+                                : user.status === "pending"
+                                  ? "status-pending"
+                                  : "status-closed"
+                            }
+                          >
+                            {user.status}
+                          </Badge>
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Other tabs content - placeholder for now */}
+          {/* Tickets Tab */}
           <TabsContent value="tickets">
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle>Ticket Overview</CardTitle>
-                <CardDescription>System-wide ticket statistics and management</CardDescription>
+                <CardTitle>System-wide Ticket Statistics</CardTitle>
+                <CardDescription>Overview of all tickets in the system</CardDescription>
               </CardHeader>
               <CardContent>
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>Ticket management features coming soon...</AlertDescription>
-                </Alert>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <p className="text-2xl font-bold text-blue-600">{stats.tickets.total}</p>
+                    <p className="text-sm text-blue-600">Total</p>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <p className="text-2xl font-bold text-orange-600">{stats.tickets.open}</p>
+                    <p className="text-sm text-orange-600">Open</p>
+                  </div>
+                  <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                    <p className="text-2xl font-bold text-yellow-600">{stats.tickets.in_progress}</p>
+                    <p className="text-sm text-yellow-600">In Progress</p>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <p className="text-2xl font-bold text-purple-600">{stats.tickets.pending}</p>
+                    <p className="text-sm text-purple-600">Pending</p>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <p className="text-2xl font-bold text-green-600">{stats.tickets.resolved}</p>
+                    <p className="text-sm text-green-600">Resolved</p>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold text-gray-600">{stats.tickets.closed}</p>
+                    <p className="text-sm text-gray-600">Closed</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Departments Tab */}
           <TabsContent value="departments">
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle>Department Management</CardTitle>
-                <CardDescription>Manage organizational departments and supervisors</CardDescription>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Department Management</CardTitle>
+                    <CardDescription>Manage organizational departments and supervisors</CardDescription>
+                  </div>
+                  <Dialog open={showCreateDept} onOpenChange={setShowCreateDept}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Department
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Create New Department</DialogTitle>
+                        <DialogDescription>Add a new department to your organization</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="name">Department Name</Label>
+                          <Input
+                            id="name"
+                            value={newDepartment.name}
+                            onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                            placeholder="Enter department name"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="description">Description</Label>
+                          <Textarea
+                            id="description"
+                            value={newDepartment.description}
+                            onChange={(e) => setNewDepartment({ ...newDepartment, description: e.target.value })}
+                            placeholder="Enter department description"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="supervisor">Supervisor</Label>
+                          <Select
+                            value={newDepartment.supervisorId}
+                            onValueChange={(value) => setNewDepartment({ ...newDepartment, supervisorId: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select supervisor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {users
+                                .filter((u) => u.role === "supervisor" || u.role === "admin")
+                                .map((user) => (
+                                  <SelectItem key={user.id} value={user.id.toString()}>
+                                    {user.first_name} {user.last_name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex justify-end space-x-2">
+                          <Button variant="outline" onClick={() => setShowCreateDept(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={createDepartment}>Create Department</Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent>
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>Department management features coming soon...</AlertDescription>
-                </Alert>
+                <div className="space-y-4">
+                  {departments.map((dept) => (
+                    <div key={dept.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{dept.name}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{dept.description}</p>
+                          <div className="flex items-center space-x-4 text-sm text-gray-500 mt-2">
+                            {dept.supervisor && (
+                              <span>
+                                Supervisor: {dept.supervisor.first_name} {dept.supervisor.last_name}
+                              </span>
+                            )}
+                            <span>{dept.user_count.length} members</span>
+                            <span>Created {formatDate(dept.created_at)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge className={dept.is_active ? "status-resolved" : "status-closed"}>
+                            {dept.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 bg-transparent">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Settings Tab */}
           <TabsContent value="settings">
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle>System Settings</CardTitle>
+                <CardTitle className="flex items-center">
+                  <Settings className="w-5 h-5 mr-2" />
+                  System Settings
+                </CardTitle>
                 <CardDescription>Configure system-wide settings and preferences</CardDescription>
               </CardHeader>
               <CardContent>
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>System settings features coming soon...</AlertDescription>
-                </Alert>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h3 className="font-medium text-gray-900">General Settings</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">Email Notifications</p>
+                            <p className="text-sm text-gray-600">Send email notifications for ticket updates</p>
+                          </div>
+                          <Button variant="outline" size="sm">
+                            Configure
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">Auto Assignment</p>
+                            <p className="text-sm text-gray-600">Automatically assign tickets to available users</p>
+                          </div>
+                          <Button variant="outline" size="sm">
+                            Configure
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <h3 className="font-medium text-gray-900">Security Settings</h3>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">Session Timeout</p>
+                            <p className="text-sm text-gray-600">Configure user session timeout duration</p>
+                          </div>
+                          <Button variant="outline" size="sm">
+                            Configure
+                          </Button>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">Password Policy</p>
+                            <p className="text-sm text-gray-600">Set password requirements and policies</p>
+                          </div>
+                          <Button variant="outline" size="sm">
+                            Configure
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

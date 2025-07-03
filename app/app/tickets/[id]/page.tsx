@@ -14,7 +14,7 @@ import { ArrowLeft, MessageSquare, User, Calendar, Flag, Send, Paperclip, Eye, E
 import toast from "react-hot-toast"
 
 interface TicketDetail {
-  id: string
+  id: number
   ticket_number: string
   title: string
   description: string
@@ -24,10 +24,10 @@ interface TicketDetail {
   updated_at: string
   creator: { first_name: string; last_name: string; email: string; avatar_url?: string }
   assignee?: { first_name: string; last_name: string; email: string; avatar_url?: string }
-  category: { name: string; color: string }
-  department: { name: string }
+  category?: { name: string; color: string }
+  department?: { name: string }
   comments: Array<{
-    id: string
+    id: number
     content: string
     is_internal: boolean
     is_system_message: boolean
@@ -35,7 +35,7 @@ interface TicketDetail {
     user: { first_name: string; last_name: string; avatar_url?: string; role: string }
   }>
   activities: Array<{
-    id: string
+    id: number
     action: string
     description: string
     created_at: string
@@ -65,7 +65,7 @@ export default function TicketDetailPage() {
 
   const fetchTicket = async () => {
     try {
-      const response = await fetch(`/api/tickets/${ticketId}`)
+      const response = await fetch(`/api/tickets/${ticketId}`, { credentials: "include" })
       if (response.ok) {
         const ticketData = await response.json()
         setTicket(ticketData)
@@ -89,6 +89,7 @@ export default function TicketDetailPage() {
       const response = await fetch(`/api/tickets/${ticketId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           content: newComment,
           isInternal,
@@ -98,7 +99,7 @@ export default function TicketDetailPage() {
       if (response.ok) {
         setNewComment("")
         setIsInternal(false)
-        fetchTicket() // Refresh ticket data
+        fetchTicket()
         toast.success("Comment added successfully")
       } else {
         toast.error("Failed to add comment")
@@ -115,6 +116,7 @@ export default function TicketDetailPage() {
       const response = await fetch(`/api/tickets/${ticketId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ status: newStatus }),
       })
 
@@ -372,17 +374,21 @@ export default function TicketDetailPage() {
                     {ticket.priority}
                   </Badge>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600">Category</span>
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: ticket.category.color }} />
-                    <span className="text-sm text-gray-900">{ticket.category.name}</span>
+                {ticket.category && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">Category</span>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: ticket.category.color }} />
+                      <span className="text-sm text-gray-900">{ticket.category.name}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600">Department</span>
-                  <span className="text-sm text-gray-900">{ticket.department.name}</span>
-                </div>
+                )}
+                {ticket.department && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">Department</span>
+                    <span className="text-sm text-gray-900">{ticket.department.name}</span>
+                  </div>
+                )}
                 <Separator />
                 <div className="space-y-3">
                   <div>

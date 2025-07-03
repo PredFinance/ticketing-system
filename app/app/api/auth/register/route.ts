@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "All fields are required" }, { status: 400 })
     }
 
-    // Create user in Supabase Auth first
+    // Create user in Supabase Auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -22,23 +22,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (!authData.user) {
-      return NextResponse.json({ message: "Failed to create auth user" }, { status: 500 })
+      return NextResponse.json({ message: "Failed to create user" }, { status: 500 })
     }
 
-    // Get default organization (assuming ID 1)
+    // Get default organization
     const { data: organization } = await supabaseAdmin.from("organizations").select("id").limit(1).single()
 
     if (!organization) {
-      // Clean up auth user if no organization
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       return NextResponse.json({ message: "No organization found" }, { status: 500 })
     }
 
-    // Create user profile in users table with auth_user_id reference
+    // Create user profile in our users table
     const { data: newUser, error: profileError } = await supabaseAdmin
       .from("users")
       .insert({
-        auth_user_id: authData.user.id, // UUID from Supabase Auth
+        auth_user_id: authData.user.id,
         organization_id: organization.id,
         department_id: departmentId ? Number(departmentId) : null,
         email,
@@ -58,12 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Failed to create user profile" }, { status: 500 })
     }
 
-    return NextResponse.json(
-      {
-        message: "Registration successful. Please wait for admin approval.",
-      },
-      { status: 201 },
-    )
+    return NextResponse.json({ message: "Registration successful. Please wait for admin approval." }, { status: 201 })
   } catch (error) {
     console.error("Registration error:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })

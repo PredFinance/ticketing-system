@@ -38,14 +38,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkAuth = async () => {
     try {
       const response = await fetch("/api/auth/me", {
-        credentials: "include", // Important for cookies
+        credentials: "include",
       })
 
       if (response.ok) {
         const userData = await response.json()
         setUser(userData)
       } else if (response.status === 401) {
-        // User is not authenticated
         setUser(null)
       }
     } catch (error) {
@@ -67,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Important for cookies
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       })
 

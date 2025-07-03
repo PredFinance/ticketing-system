@@ -12,7 +12,7 @@ import { Ticket, Plus, Search, MessageSquare, Clock, User, Calendar, Eye } from 
 import toast from "react-hot-toast"
 
 interface TicketData {
-  id: string
+  id: number
   ticket_number: string
   title: string
   status: string
@@ -21,7 +21,7 @@ interface TicketData {
   updated_at: string
   creator: { first_name: string; last_name: string }
   assignee?: { first_name: string; last_name: string }
-  category: { name: string; color: string }
+  category?: { name: string; color: string }
   comments_count: Array<any>
 }
 
@@ -49,7 +49,7 @@ export default function TicketsPage() {
 
   const fetchTickets = async () => {
     try {
-      const response = await fetch("/api/tickets")
+      const response = await fetch("/api/tickets", { credentials: "include" })
       if (response.ok) {
         const ticketsData = await response.json()
         setTickets(ticketsData)
@@ -71,7 +71,7 @@ export default function TicketsPage() {
         (ticket) =>
           ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
           ticket.ticket_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          ticket.category.name.toLowerCase().includes(searchTerm.toLowerCase()),
+          (ticket.category?.name || "").toLowerCase().includes(searchTerm.toLowerCase()),
       )
     }
 
@@ -148,7 +148,13 @@ export default function TicketsPage() {
               <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center mr-3">
                 <Ticket className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">My Tickets</h1>
+              <h1 className="text-xl font-semibold text-gray-900">
+                {user?.role === "admin"
+                  ? "All Tickets"
+                  : user?.role === "supervisor"
+                    ? "Department Tickets"
+                    : "My Tickets"}
+              </h1>
             </div>
             <Button
               onClick={() => router.push("/tickets/create")}
@@ -212,7 +218,13 @@ export default function TicketsPage() {
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle>Tickets ({filteredTickets.length})</CardTitle>
-                <CardDescription>Manage and track your support requests</CardDescription>
+                <CardDescription>
+                  {user?.role === "admin"
+                    ? "All tickets in the system"
+                    : user?.role === "supervisor"
+                      ? "Tickets in your department"
+                      : "Your support tickets"}
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -250,8 +262,15 @@ export default function TicketsPage() {
                             {ticket.status.replace("_", " ")}
                           </Badge>
                           <Badge className={`text-xs ${getPriorityColor(ticket.priority)}`}>{ticket.priority}</Badge>
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ticket.category.color }} />
-                          <span className="text-sm text-gray-600">{ticket.category.name}</span>
+                          {ticket.category && (
+                            <>
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: ticket.category.color }}
+                              />
+                              <span className="text-sm text-gray-600">{ticket.category.name}</span>
+                            </>
+                          )}
                         </div>
                         <p className="text-gray-900 font-medium mb-1">{ticket.title}</p>
                         <div className="flex items-center space-x-4 text-sm text-gray-500">
