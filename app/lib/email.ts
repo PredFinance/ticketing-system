@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer"
 
 // Email configuration
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: Number.parseInt(process.env.SMTP_PORT || "587"),
   secure: false, // true for 465, false for other ports
@@ -32,7 +32,10 @@ export async function sendEmail({ to, subject, html, text }: EmailOptions) {
     return { success: true, messageId: info.messageId }
   } catch (error) {
     console.error("Email sending failed:", error)
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 
