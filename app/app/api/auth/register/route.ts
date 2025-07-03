@@ -1,5 +1,5 @@
-import { type NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "All fields are required" }, { status: 400 })
     }
 
-    // Create user in Supabase Auth
+    // Create user in Supabase Auth first
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -22,32 +22,34 @@ export async function POST(request: NextRequest) {
     }
 
     if (!authData.user) {
-      return NextResponse.json({ message: "Failed to create user" }, { status: 500 })
+      return NextResponse.json({ message: "Failed to create auth user" }, { status: 500 })
     }
 
-    // Get default organization
+    // Get default organization (assuming ID 1)
     const { data: organization } = await supabaseAdmin.from("organizations").select("id").limit(1).single()
 
     if (!organization) {
+      // Clean up auth user if no organization
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       return NextResponse.json({ message: "No organization found" }, { status: 500 })
     }
 
-    // Create user profile in our users table
-   const { data: newUser, error: profileError } = await supabaseAdmin
-  .from("users")
-  .insert({
-    auth_user_id: authData.user.id,
-    organization_id: organization.id,
-    department_id: departmentId ? Number(departmentId) : null, // <-- use departmentId
-    email,
-    first_name: firstName,
-    last_name: lastName,
-    role: "user",
-    status: "pending",
-    email_verified: true,
-  })
-  .select()
-  .single()
+    // Create user profile in users table with auth_user_id reference
+    const { data: newUser, error: profileError } = await supabaseAdmin
+      .from("users")
+      .insert({
+        auth_user_id: authData.user.id, // UUID from Supabase Auth
+        organization_id: organization.id,
+        department_id: departmentId ? Number(departmentId) : null,
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        role: "user",
+        status: "pending",
+        email_verified: true,
+      })
+      .select()
+      .single()
 
     if (profileError) {
       console.error("Profile creation error:", profileError)
@@ -56,7 +58,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Failed to create user profile" }, { status: 500 })
     }
 
-    return NextResponse.json({ message: "Registration successful. Please wait for admin approval." }, { status: 201 })
+    return NextResponse.json(
+      {
+        message: "Registration successful. Please wait for admin approval.",
+      },
+      { status: 201 },
+    )
   } catch (error) {
     console.error("Registration error:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })

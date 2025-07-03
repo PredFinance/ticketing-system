@@ -1,9 +1,28 @@
--- Supabase Setup Script WITHOUT RLS policies
+-- Complete Supabase Database Schema
+-- Run this in your Supabase SQL Editor
 
--- Remove UUID extension if not needed
-DROP EXTENSION IF EXISTS "uuid-ossp";
+-- Drop existing tables if they exist (be careful in production!)
+DROP TABLE IF EXISTS email_notifications CASCADE;
+DROP TABLE IF EXISTS system_settings CASCADE;
+DROP TABLE IF EXISTS ticket_activities CASCADE;
+DROP TABLE IF EXISTS ticket_watchers CASCADE;
+DROP TABLE IF EXISTS attachments CASCADE;
+DROP TABLE IF EXISTS ticket_comments CASCADE;
+DROP TABLE IF EXISTS tickets CASCADE;
+DROP TABLE IF EXISTS ticket_categories CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS departments CASCADE;
+DROP TABLE IF EXISTS organizations CASCADE;
 
--- Custom types
+-- Drop existing types if they exist
+DROP TYPE IF EXISTS setting_type CASCADE;
+DROP TYPE IF EXISTS notification_status CASCADE;
+DROP TYPE IF EXISTS ticket_status CASCADE;
+DROP TYPE IF EXISTS ticket_priority CASCADE;
+DROP TYPE IF EXISTS user_status CASCADE;
+DROP TYPE IF EXISTS user_role CASCADE;
+
+-- Create custom types
 CREATE TYPE user_role AS ENUM ('admin', 'supervisor', 'user');
 CREATE TYPE user_status AS ENUM ('pending', 'active', 'inactive', 'suspended');
 CREATE TYPE ticket_priority AS ENUM ('low', 'medium', 'high', 'urgent');
@@ -31,13 +50,13 @@ CREATE TABLE departments (
     organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    supervisor_id INTEGER,
+    supervisor_id INTEGER, -- Will be linked after users table is created
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Users table (integer PK, with optional auth_user_id UUID)
+-- Users table (integer PK with UUID bridge to Supabase Auth)
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
@@ -53,12 +72,13 @@ CREATE TABLE users (
     email_verified BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    auth_user_id UUID UNIQUE
+    auth_user_id UUID UNIQUE -- Bridge to Supabase Auth users
 );
 
--- Add foreign key for department supervisor
-ALTER TABLE departments ADD CONSTRAINT fk_department_supervisor 
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL;
+-- Add foreign key constraint for department supervisor
+ALTER TABLE departments 
+ADD CONSTRAINT fk_department_supervisor 
+FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL;
 
 -- Ticket categories table
 CREATE TABLE ticket_categories (
@@ -68,7 +88,8 @@ CREATE TABLE ticket_categories (
     description TEXT,
     color VARCHAR(7) DEFAULT '#6366f1',
     is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Tickets table
@@ -171,18 +192,32 @@ CREATE TABLE system_settings (
 );
 
 -- Create indexes for better performance
+CREATE INDEX idx_users_auth_user_id ON users(auth_user_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_organization ON users(organization_id);
+CREATE INDEX idx_users_department ON users(department_id);
+
 CREATE INDEX idx_tickets_status ON tickets(status);
 CREATE INDEX idx_tickets_priority ON tickets(priority);
 CREATE INDEX idx_tickets_created_by ON tickets(created_by);
 CREATE INDEX idx_tickets_assigned_to ON tickets(assigned_to);
 CREATE INDEX idx_tickets_department ON tickets(department_id);
+CREATE INDEX idx_tickets_organization ON tickets(organization_id);
 CREATE INDEX idx_tickets_created_at ON tickets(created_at);
+CREATE INDEX idx_tickets_ticket_number ON tickets(ticket_number);
+
 CREATE INDEX idx_ticket_comments_ticket_id ON ticket_comments(ticket_id);
+CREATE INDEX idx_ticket_comments_user_id ON ticket_comments(user_id);
 CREATE INDEX idx_ticket_comments_created_at ON ticket_comments(created_at);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_status ON users(status);
+
+CREATE INDEX idx_ticket_activities_ticket_id ON ticket_activities(ticket_id);
+CREATE INDEX idx_ticket_activities_user_id ON ticket_activities(user_id);
+CREATE INDEX idx_ticket_activities_created_at ON ticket_activities(created_at);
+
 CREATE INDEX idx_email_notifications_status ON email_notifications(status);
+CREATE INDEX idx_email_notifications_scheduled_at ON email_notifications(scheduled_at);
 
 -- Create functions for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -194,16 +229,45 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
-CREATE TRIGGER update_organizations_updated_at BEFORE UPDATE ON organizations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON tickets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_ticket_comments_updated_at BEFORE UPDATE ON ticket_comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_system_settings_updated_at BEFORE UPDATE ON system_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_organizations_updated_at 
+    BEFORE UPDATE ON organizations 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_departments_updated_at 
+    BEFORE UPDATE ON departments 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_users_updated_at 
+    BEFORE UPDATE ON users 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tickets_updated_at 
+    BEFORE UPDATE ON tickets 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_ticket_comments_updated_at 
+    BEFORE UPDATE ON ticket_comments 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_ticket_categories_updated_at 
+    BEFORE UPDATE ON ticket_categories 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_system_settings_updated_at 
+    BEFORE UPDATE ON system_settings 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert default organization
 INSERT INTO organizations (name, email, phone, address) VALUES 
 ('Default Organization', 'admin@organization.com', '+1-555-0123', '123 Business St, City, State 12345');
+
+-- Insert default departments
+INSERT INTO departments (organization_id, name, description) VALUES 
+(1, 'IT Support', 'Information Technology support and maintenance'),
+(1, 'Customer Service', 'Customer support and service'),
+(1, 'Development', 'Software development and engineering'),
+(1, 'Quality Assurance', 'Testing and quality assurance'),
+(1, 'General', 'General inquiries and support');
 
 -- Insert ticket categories
 INSERT INTO ticket_categories (organization_id, name, description, color) VALUES 
@@ -211,14 +275,10 @@ INSERT INTO ticket_categories (organization_id, name, description, color) VALUES
 (1, 'Bug Report', 'Software bugs and issues', '#ef4444'),
 (1, 'Feature Request', 'New feature requests and enhancements', '#10b981'),
 (1, 'General Inquiry', 'General questions and inquiries', '#6366f1'),
-(1, 'Account Issues', 'Account related problems', '#f59e0b');
-
--- Insert departments
-INSERT INTO departments (organization_id, name, description) VALUES 
-(1, 'IT Support', 'Information Technology support and maintenance'),
-(1, 'Customer Service', 'Customer support and service'),
-(1, 'Development', 'Software development and engineering'),
-(1, 'Quality Assurance', 'Testing and quality assurance');
+(1, 'Account Issues', 'Account related problems', '#f59e0b'),
+(1, 'Hardware Issues', 'Hardware problems and requests', '#8b5cf6'),
+(1, 'Network Issues', 'Network connectivity problems', '#f97316'),
+(1, 'Security Issues', 'Security concerns and incidents', '#dc2626');
 
 -- Insert default system settings
 INSERT INTO system_settings (organization_id, setting_key, setting_value, setting_type, description, is_public) VALUES 
@@ -230,4 +290,74 @@ INSERT INTO system_settings (organization_id, setting_key, setting_value, settin
 (1, 'business_hours_start', '09:00', 'string', 'Business hours start time', true),
 (1, 'business_hours_end', '17:00', 'string', 'Business hours end time', true),
 (1, 'support_email', 'support@organization.com', 'string', 'Support email address', true),
-(1, 'support_phone', '+1-555-0123', 'string', 'Support phone number', true);
+(1, 'support_phone', '+1-555-0123', 'string', 'Support phone number', true),
+(1, 'auto_close_resolved_tickets', '7', 'number', 'Days after which resolved tickets are auto-closed', false),
+(1, 'require_category', 'false', 'boolean', 'Require category selection when creating tickets', false);
+
+-- Create a function to automatically set ticket status timestamps
+CREATE OR REPLACE FUNCTION update_ticket_status_timestamps()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Set resolved_at when status changes to resolved
+    IF NEW.status = 'resolved' AND OLD.status != 'resolved' THEN
+        NEW.resolved_at = NOW();
+    END IF;
+    
+    -- Set closed_at when status changes to closed
+    IF NEW.status = 'closed' AND OLD.status != 'closed' THEN
+        NEW.closed_at = NOW();
+    END IF;
+    
+    -- Clear timestamps if status changes away from resolved/closed
+    IF NEW.status != 'resolved' AND OLD.status = 'resolved' THEN
+        NEW.resolved_at = NULL;
+    END IF;
+    
+    IF NEW.status != 'closed' AND OLD.status = 'closed' THEN
+        NEW.closed_at = NULL;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Create trigger for ticket status timestamps
+CREATE TRIGGER update_ticket_status_timestamps_trigger
+    BEFORE UPDATE ON tickets
+    FOR EACH ROW EXECUTE FUNCTION update_ticket_status_timestamps();
+
+-- Enable Row Level Security (RLS) on all tables
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_watchers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies (basic policies - you may need to adjust based on your needs)
+-- Allow service role to bypass RLS
+CREATE POLICY "Service role can do everything" ON organizations FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON departments FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON users FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON ticket_categories FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON tickets FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON ticket_comments FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON attachments FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON ticket_watchers FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON ticket_activities FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON email_notifications FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service role can do everything" ON system_settings FOR ALL USING (auth.role() = 'service_role');
+
+-- Allow authenticated users to read their own data
+CREATE POLICY "Users can read their own profile" ON users FOR SELECT USING (auth.uid() = auth_user_id);
+CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (auth.uid() = auth_user_id);
+
+-- Grant necessary permissions
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;

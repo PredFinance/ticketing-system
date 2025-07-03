@@ -1,37 +1,13 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
-import { NextResponse, type NextRequest } from "next/server"
+import { authenticateUser } from "@/lib/auth"
+import { createSupabaseServerClient } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
+  const { user, error } = await authenticateUser()
+  if (error) return error
+
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    )
-
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userProfile, error: profileError } = await supabase
-      .from("users")
-      .select("id, role, organization_id")
-      .eq("auth_user_id", user.id)
-      .single()
-    if (profileError || !userProfile) {
-      return NextResponse.json({ message: "User profile not found" }, { status: 404 })
-    }
+    const supabase = await createSupabaseServerClient()
 
     let query = supabase
       .from("tickets")
@@ -40,16 +16,18 @@ export async function GET(request: NextRequest) {
         category:ticket_categories(name, color),
         department:departments(name),
         creator:users!tickets_created_by_fkey(first_name, last_name),
-        assignee:users!tickets_assigned_to_fkey(first_name, last_name),
-        comments_count:ticket_comments(count)
+        assignee:users!tickets_assigned_to_fkey(first_name, last_name)
       `)
-      .eq("organization_id", userProfile.organization_id)
+      .eq("organization_id", user!.organization_id)
 
-    // Filter based on user role
-    if (userProfile.role === "user") {
-      // Use the integer userProfile.id for created_by/assigned_to
-      query = query.or(`created_by.eq.${userProfile.id},assigned_to.eq.${userProfile.id}`)
+    // Filter based on user role - use integer IDs for relationships
+    if (user!.role === "user") {
+      query = query.or(`created_by.eq.${user!.id},assigned_to.eq.${user!.id}`)
+    } else if (user!.role === "supervisor" && user!.department_id) {
+      // Supervisors see tickets from their department
+      query = query.eq("department_id", user!.department_id)
     }
+    // Admins see all tickets (no additional filter)
 
     const { data: tickets, error: ticketsError } = await query.order("created_at", { ascending: false })
 

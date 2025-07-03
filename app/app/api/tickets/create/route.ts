@@ -1,23 +1,14 @@
+import { authenticateUser } from "@/lib/auth"
+import { createSupabaseServerClient } from "@/lib/supabase"
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
-import { cookies } from "next/headers"
 
 export async function POST(request: NextRequest) {
+  const { user, error } = await authenticateUser()
+  if (error) return error
+
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("supabase-auth-token")?.value
+    const supabase = await createSupabaseServerClient()
 
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get user from token
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
-    if (userError || !userData.user) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 })
-    }
-
-    // Parse form data
     const formData = await request.formData()
     const title = formData.get("title") as string
     const description = formData.get("description") as string
@@ -29,33 +20,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Title and description are required" }, { status: 400 })
     }
 
-    // Get user profile to get organization
-    const { data: userProfile } = await supabase
-      .from("users")
-      .select("organization_id")
-      .eq("auth_user_id", userData.user.id)
-      .single()
-
-    if (!userProfile) {
-      return NextResponse.json({ message: "User profile not found" }, { status: 404 })
-    }
-
-    // Generate ticket number
+    // Generate unique ticket number
     const ticketNumber = `TKT-${Date.now().toString().slice(-6)}`
 
-    // Create ticket
+    // Create ticket using integer IDs
     const { data: ticket, error: ticketError } = await supabase
       .from("tickets")
       .insert({
-        organization_id: userProfile.organization_id,
+        organization_id: user!.organization_id,
         ticket_number: ticketNumber,
         title,
         description,
-        category_id: categoryId || null,
-        department_id: departmentId || null,
+        category_id: categoryId ? Number(categoryId) : null,
+        department_id: departmentId ? Number(departmentId) : null,
         priority: priority as any,
         status: "open",
-        created_by: userData.user.id,
+        created_by: user!.id, // Use integer ID from users table
       })
       .select()
       .single()
@@ -65,17 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Failed to create ticket" }, { status: 500 })
     }
 
-    // Handle file uploads (simplified for now)
-    const files = formData.getAll("files") as File[]
-    if (files.length > 0) {
-      // TODO: Implement file upload to storage and save attachment records
-      console.log(`${files.length} files to upload for ticket ${ticketNumber}`)
-    }
-
     // Add initial system message
     await supabase.from("ticket_comments").insert({
       ticket_id: ticket.id,
-      user_id: userData.user.id,
+      user_id: user!.id, // Use integer ID
       content: `Ticket created with priority: ${priority}`,
       is_system_message: true,
     })
@@ -83,13 +56,13 @@ export async function POST(request: NextRequest) {
     // Add user as watcher
     await supabase.from("ticket_watchers").insert({
       ticket_id: ticket.id,
-      user_id: userData.user.id,
+      user_id: user!.id, // Use integer ID
     })
 
     // Log activity
     await supabase.from("ticket_activities").insert({
       ticket_id: ticket.id,
-      user_id: userData.user.id,
+      user_id: user!.id, // Use integer ID
       action: "created",
       description: "Ticket created",
     })

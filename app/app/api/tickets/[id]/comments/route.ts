@@ -1,21 +1,13 @@
+import { authenticateUser } from "@/lib/auth"
+import { createSupabaseServerClient } from "@/lib/supabase"
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
-import { cookies } from "next/headers"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  const { user, error } = await authenticateUser()
+  if (error) return error
+
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("supabase-auth-token")?.value
-
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
-    if (userError || !userData.user) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 })
-    }
-
+    const supabase = await createSupabaseServerClient()
     const { id } = params
     const { content, isInternal } = await request.json()
 
@@ -30,11 +22,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: "Ticket not found" }, { status: 404 })
     }
 
-    const { data: comment, error } = await supabase
+    const { data: comment, error: commentError } = await supabase
       .from("ticket_comments")
       .insert({
         ticket_id: ticket.id,
-        user_id: userData.user.id,
+        user_id: user!.id, // Use integer ID
         content,
         is_internal: isInternal || false,
       })
@@ -44,18 +36,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       `)
       .single()
 
-    if (error) {
-      console.error("Comment creation error:", error)
+    if (commentError) {
+      console.error("Comment creation error:", commentError)
       return NextResponse.json({ message: "Failed to create comment" }, { status: 500 })
     }
 
     // Update ticket's updated_at
     await supabase.from("tickets").update({ updated_at: new Date().toISOString() }).eq("id", ticket.id)
 
-    // Log activity
+    // Log activity using integer ID
     await supabase.from("ticket_activities").insert({
       ticket_id: ticket.id,
-      user_id: userData.user.id,
+      user_id: user!.id,
       action: "commented",
       description: "Added a comment",
     })

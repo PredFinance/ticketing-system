@@ -1,37 +1,25 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
-import { cookies } from "next/headers"
+import { requireAdmin } from "@/lib/auth"
+import { createSupabaseServerClient } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
+  const { user, error } = await requireAdmin()
+  if (error) return error
+
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("supabase-auth-token")?.value
+    const supabase = await createSupabaseServerClient()
 
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
-    if (userError || !userData.user) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 })
-    }
-
-    const { data: userProfile } = await supabase.from("users").select("role").eq("auth_user_id", userData.user.id).single()
-    if (!userProfile || userProfile.role !== "admin") {
-      return NextResponse.json({ message: "Admin access required" }, { status: 403 })
-    }
-
-    // Get all users with department info
-    const { data: users, error } = await supabase
+    const { data: users, error: usersError } = await supabase
       .from("users")
       .select(`
         *,
         departments(name)
       `)
+      .eq("organization_id", user!.organization_id)
       .order("created_at", { ascending: false })
 
-    if (error) {
-      console.error("Users fetch error:", error)
+    if (usersError) {
+      console.error("Users fetch error:", usersError)
       return NextResponse.json({ message: "Failed to fetch users" }, { status: 500 })
     }
 

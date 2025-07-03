@@ -1,25 +1,16 @@
+import { authenticateUser } from "@/lib/auth"
+import { createSupabaseServerClient } from "@/lib/supabase"
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
-import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const { user, error } = await authenticateUser()
+  if (error) return error
+
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("supabase-auth-token")?.value
-
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
-    if (userError || !userData.user) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 })
-    }
-
+    const supabase = await createSupabaseServerClient()
     const { id } = params
 
-    // Get ticket with all related data
-    const { data: ticket, error } = await supabase
+    const { data: ticket, error: ticketError } = await supabase
       .from("tickets")
       .select(`
         *,
@@ -40,9 +31,20 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .eq("ticket_number", id)
       .single()
 
-    if (error) {
-      console.error("Ticket fetch error:", error)
+    if (ticketError) {
+      console.error("Ticket fetch error:", ticketError)
       return NextResponse.json({ message: "Ticket not found" }, { status: 404 })
+    }
+
+    // Check access permissions
+    if (user!.role === "user") {
+      if (ticket.created_by !== user!.id && ticket.assigned_to !== user!.id) {
+        return NextResponse.json({ message: "Access denied" }, { status: 403 })
+      }
+    } else if (user!.role === "supervisor") {
+      if (ticket.department_id !== user!.department_id) {
+        return NextResponse.json({ message: "Access denied" }, { status: 403 })
+      }
     }
 
     return NextResponse.json(ticket)
@@ -53,38 +55,30 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  const { user, error } = await authenticateUser()
+  if (error) return error
+
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("supabase-auth-token")?.value
-
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
-    if (userError || !userData.user) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 })
-    }
-
+    const supabase = await createSupabaseServerClient()
     const { id } = params
     const updates = await request.json()
 
-    const { data: ticket, error } = await supabase
+    const { data: ticket, error: updateError } = await supabase
       .from("tickets")
       .update(updates)
       .eq("ticket_number", id)
       .select()
       .single()
 
-    if (error) {
-      console.error("Ticket update error:", error)
+    if (updateError) {
+      console.error("Ticket update error:", updateError)
       return NextResponse.json({ message: "Failed to update ticket" }, { status: 500 })
     }
 
-    // Log activity
+    // Log activity using integer ID
     await supabase.from("ticket_activities").insert({
       ticket_id: ticket.id,
-      user_id: userData.user.id,
+      user_id: user!.id,
       action: "updated",
       description: `Ticket updated: ${Object.keys(updates).join(", ")}`,
     })
