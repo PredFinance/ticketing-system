@@ -1,3 +1,5 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
 export type Database = {
   public: {
     Tables: {
@@ -13,7 +15,7 @@ export type Database = {
           address: string | null
           is_active: boolean
           onboarding_completed: boolean
-          settings: any
+          settings: Json | null
           created_at: string
           updated_at: string
         }
@@ -27,7 +29,9 @@ export type Database = {
           logo_url?: string | null
           is_active?: boolean
           onboarding_completed?: boolean
-          settings?: any
+          settings?: Json | null
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           name?: string
@@ -39,7 +43,9 @@ export type Database = {
           logo_url?: string | null
           is_active?: boolean
           onboarding_completed?: boolean
-          settings?: any
+          settings?: Json | null
+          created_at?: string
+          updated_at?: string
         }
       }
       departments: {
@@ -59,6 +65,8 @@ export type Database = {
           description?: string | null
           color?: string
           is_active?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           organization_id?: number
@@ -66,6 +74,8 @@ export type Database = {
           description?: string | null
           color?: string
           is_active?: boolean
+          created_at?: string
+          updated_at?: string
         }
       }
       user_profiles: {
@@ -78,6 +88,7 @@ export type Database = {
           avatar_url: string | null
           phone: string | null
           role: "admin" | "supervisor" | "user"
+          status: "pending" | "approved" | "suspended"
           is_approved: boolean
           approved_by: number | null
           approved_at: string | null
@@ -95,12 +106,15 @@ export type Database = {
           avatar_url?: string | null
           phone?: string | null
           role?: "admin" | "supervisor" | "user"
+          status?: "pending" | "approved" | "suspended"
           is_approved?: boolean
           approved_by?: number | null
           approved_at?: string | null
           last_login?: string | null
           is_online?: boolean
           settings?: any
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           organization_id?: number
@@ -109,12 +123,15 @@ export type Database = {
           avatar_url?: string | null
           phone?: string | null
           role?: "admin" | "supervisor" | "user"
+          status?: "pending" | "approved" | "suspended"
           is_approved?: boolean
           approved_by?: number | null
           approved_at?: string | null
           last_login?: string | null
           is_online?: boolean
           settings?: any
+          created_at?: string
+          updated_at?: string
         }
       }
       user_departments: {
@@ -152,7 +169,7 @@ export type Database = {
           title: string
           description: string
           priority: "low" | "medium" | "high" | "critical"
-          status: "open" | "in_progress" | "resolved" | "closed" | "reserved"
+          status: "open" | "in_progress" | "resolved" | "closed"
           visibility: "public" | "private"
           tags: string[] | null
           due_date: string | null
@@ -172,11 +189,13 @@ export type Database = {
           title: string
           description: string
           priority?: "low" | "medium" | "high" | "critical"
-          status?: "open" | "in_progress" | "resolved" | "closed" | "reserved"
+          status?: "open" | "in_progress" | "resolved" | "closed"
           visibility?: "public" | "private"
           tags?: string[] | null
           due_date?: string | null
           metadata?: any
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           department_id?: number
@@ -186,13 +205,15 @@ export type Database = {
           title?: string
           description?: string
           priority?: "low" | "medium" | "high" | "critical"
-          status?: "open" | "in_progress" | "resolved" | "closed" | "reserved"
+          status?: "open" | "in_progress" | "resolved" | "closed"
           visibility?: "public" | "private"
           tags?: string[] | null
           due_date?: string | null
           resolved_at?: string | null
           closed_at?: string | null
           metadata?: any
+          created_at?: string
+          updated_at?: string
         }
       }
       ticket_categories: {
@@ -240,6 +261,8 @@ export type Database = {
           content: string
           is_internal?: boolean
           mentioned_users?: number[] | null
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           ticket_id?: number
@@ -247,6 +270,8 @@ export type Database = {
           content?: string
           is_internal?: boolean
           mentioned_users?: number[] | null
+          created_at?: string
+          updated_at?: string
         }
       }
       file_attachments: {
@@ -259,7 +284,7 @@ export type Database = {
           file_type: string
           file_url: string
           storage_path: string
-          related_to: string
+          related_to: "ticket" | "comment"
           related_id: number
           is_image: boolean
           created_at: string
@@ -272,9 +297,10 @@ export type Database = {
           file_type: string
           file_url: string
           storage_path: string
-          related_to: string
+          related_to: "ticket" | "comment"
           related_id: number
           is_image?: boolean
+          created_at?: string
         }
         Update: {
           organization_id?: number
@@ -284,9 +310,10 @@ export type Database = {
           file_type?: string
           file_url?: string
           storage_path?: string
-          related_to?: string
+          related_to?: "ticket" | "comment"
           related_id?: number
           is_image?: boolean
+          created_at?: string
         }
       }
       notifications: {
@@ -311,6 +338,7 @@ export type Database = {
           data?: any
           is_read?: boolean
           is_email_sent?: boolean
+          created_at?: string
         }
         Update: {
           organization_id?: number
@@ -321,8 +349,83 @@ export type Database = {
           data?: any
           is_read?: boolean
           is_email_sent?: boolean
+          created_at?: string
         }
       }
     }
   }
 }
+
+// Helper types for components
+export type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"]
+export type UserDepartment = {
+  id: number
+  user_id: number
+  department_id: number
+  is_supervisor: boolean
+  can_assign_tickets: boolean
+  joined_at: string
+  user_profiles?: UserProfile
+}
+
+export type DepartmentWithUsers = {
+  id: number
+  name: string
+  description: string | null
+  color: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  organization_id: number
+  userCount: number
+  supervisorCount: number
+  users: UserProfile[]
+  user_departments?: UserDepartment[]
+}
+
+export type TicketWithDetails = {
+  id: number
+  ticket_number: string
+  organization_id: number
+  department_id: number
+  category_id: number | null
+  created_by: number
+  assigned_to: number | null
+  assigned_by: number | null
+  title: string
+  description: string
+  priority: "low" | "medium" | "high" | "critical"
+  status: "open" | "in_progress" | "resolved" | "closed"
+  visibility: "public" | "private"
+  tags: string[] | null
+  due_date: string | null
+  resolved_at: string | null
+  closed_at: string | null
+  metadata: any
+  created_at: string
+  updated_at: string
+  departments?: { name: string; color: string }
+  user_profiles?: UserProfile
+  ticket_categories?: { name: string; color: string }
+}
+
+export type AnalyticsData = {
+  totalTickets: number
+  openTickets: number
+  resolvedTickets: number
+  avgResolutionTime: number
+  ticketsByPriority: Record<string, number>
+  ticketsByDepartment: Record<string, number>
+  ticketsByStatus: Record<string, number>
+  recentActivity: TicketWithDetails[]
+  userStats: {
+    totalUsers: number
+    activeUsers: number
+    newUsersThisMonth: number
+  }
+}
+
+export type Ticket = Database["public"]["Tables"]["tickets"]["Row"]
+export type TicketComment = Database["public"]["Tables"]["ticket_comments"]["Row"]
+export type Department = Database["public"]["Tables"]["departments"]["Row"]
+export type FileAttachment = Database["public"]["Tables"]["file_attachments"]["Row"]

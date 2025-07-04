@@ -19,11 +19,12 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth/auth-context"
+import type { AnalyticsData, TicketWithDetails } from "@/lib/supabase/database.types"
 import toast from "react-hot-toast"
 
 export default function AnalyticsDashboard() {
   const { profile } = useAuth()
-  const [analytics, setAnalytics] = useState({
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalTickets: 0,
     openTickets: 0,
     resolvedTickets: 0,
@@ -58,8 +59,9 @@ export default function AnalyticsDashboard() {
         .from("tickets")
         .select(`
           *,
-          departments (name),
-          user_profiles (full_name)
+          departments (name, color),
+          user_profiles!tickets_created_by_fkey (full_name),
+          ticket_categories (name, color)
         `)
         .eq("organization_id", profile.organization_id)
         .gte("created_at", dateFilter.toISOString())
@@ -75,7 +77,7 @@ export default function AnalyticsDashboard() {
       if (usersError) throw usersError
 
       // Process tickets data
-      const ticketList = tickets || []
+      const ticketList: TicketWithDetails[] = tickets || []
       const userList = users || []
 
       // Calculate resolution time
@@ -84,7 +86,7 @@ export default function AnalyticsDashboard() {
         resolvedTickets.length > 0
           ? resolvedTickets.reduce((acc, ticket) => {
               const created = new Date(ticket.created_at)
-              const resolved = new Date(ticket.resolved_at)
+              const resolved = new Date(ticket.resolved_at!)
               return acc + (resolved.getTime() - created.getTime())
             }, 0) /
             resolvedTickets.length /
@@ -92,20 +94,20 @@ export default function AnalyticsDashboard() {
           : 0
 
       // Group tickets by priority
-      const ticketsByPriority = ticketList.reduce((acc: any, ticket) => {
+      const ticketsByPriority = ticketList.reduce((acc: Record<string, number>, ticket) => {
         acc[ticket.priority] = (acc[ticket.priority] || 0) + 1
         return acc
       }, {})
 
       // Group tickets by department
-      const ticketsByDepartment = ticketList.reduce((acc: any, ticket) => {
+      const ticketsByDepartment = ticketList.reduce((acc: Record<string, number>, ticket) => {
         const deptName = ticket.departments?.name || "Unassigned"
         acc[deptName] = (acc[deptName] || 0) + 1
         return acc
       }, {})
 
       // Group tickets by status
-      const ticketsByStatus = ticketList.reduce((acc: any, ticket) => {
+      const ticketsByStatus = ticketList.reduce((acc: Record<string, number>, ticket) => {
         acc[ticket.status] = (acc[ticket.status] || 0) + 1
         return acc
       }, {})
@@ -274,7 +276,7 @@ export default function AnalyticsDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {Object.entries(analytics.ticketsByPriority).map(([priority, count]: [string, any]) => (
+                {Object.entries(analytics.ticketsByPriority).map(([priority, count]) => (
                   <div key={priority} className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <div className={`w-3 h-3 rounded-full ${getPriorityColor(priority)}`} />
@@ -304,7 +306,7 @@ export default function AnalyticsDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {Object.entries(analytics.ticketsByDepartment).map(([dept, count]: [string, any]) => (
+                {Object.entries(analytics.ticketsByDepartment).map(([dept, count]) => (
                   <div key={dept} className="flex items-center justify-between">
                     <span className="font-medium">{dept}</span>
                     <div className="flex items-center space-x-2">
@@ -337,7 +339,7 @@ export default function AnalyticsDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                {Object.entries(analytics.ticketsByStatus).map(([status, count]: [string, any]) => (
+                {Object.entries(analytics.ticketsByStatus).map(([status, count]) => (
                   <div key={status} className="text-center p-4 rounded-lg border">
                     <div className={`w-4 h-4 rounded-full ${getStatusColor(status)} mx-auto mb-2`} />
                     <p className="text-2xl font-bold">{count}</p>
@@ -403,7 +405,7 @@ export default function AnalyticsDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {analytics.recentActivity.slice(0, 5).map((ticket: any) => (
+              {analytics.recentActivity.slice(0, 5).map((ticket) => (
                 <div key={ticket.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center space-x-3">
                     <Badge className={`${getPriorityColor(ticket.priority)} text-white`}>{ticket.priority}</Badge>

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Plus, Edit, Trash2, Users, Search, MoreHorizontal, Settings } from "lucide-react"
@@ -15,15 +14,16 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth/auth-context"
+import type { DepartmentWithUsers, UserProfile, UserDepartment } from "@/lib/supabase/database.types"
 import toast from "react-hot-toast"
 
 export default function DepartmentManagement() {
   const { profile } = useAuth()
-  const [departments, setDepartments] = useState([])
-  const [users, setUsers] = useState([])
+  const [departments, setDepartments] = useState<DepartmentWithUsers[]>([])
+  const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedDepartment, setSelectedDepartment] = useState<any>(null)
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentWithUsers | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showUsersDialog, setShowUsersDialog] = useState(false)
@@ -62,13 +62,19 @@ export default function DepartmentManagement() {
       if (error) throw error
 
       // Process the data to count users and supervisors
-      const processedDepartments =
-        data?.map((dept) => ({
-          ...dept,
-          userCount: dept.user_departments?.length || 0,
-          supervisorCount: dept.user_departments?.filter((ud) => ud.is_supervisor)?.length || 0,
-          users: dept.user_departments?.map((ud) => ud.user_profiles) || [],
-        })) || []
+      const processedDepartments: DepartmentWithUsers[] =
+        data?.map((dept) => {
+          const userDepartments = dept.user_departments as UserDepartment[]
+          const users = userDepartments?.map((ud) => ud.user_profiles).filter(Boolean) as UserProfile[]
+
+          return {
+            ...dept,
+            userCount: userDepartments?.length || 0,
+            supervisorCount: userDepartments?.filter((ud) => ud.is_supervisor)?.length || 0,
+            users: users || [],
+            user_departments: userDepartments,
+          }
+        }) || []
 
       setDepartments(processedDepartments)
     } catch (error: any) {
@@ -100,7 +106,7 @@ export default function DepartmentManagement() {
 
     try {
       const { error } = await supabase.from("departments").insert({
-        organization_id: profile?.organization_id,
+        organization_id: profile?.organization_id!,
         name: formData.name,
         description: formData.description,
         color: formData.color,
@@ -129,7 +135,7 @@ export default function DepartmentManagement() {
           description: formData.description,
           color: formData.color,
         })
-        .eq("id", selectedDepartment.id)
+        .eq("id", selectedDepartment!.id)
 
       if (error) throw error
 
@@ -319,7 +325,7 @@ export default function DepartmentManagement() {
                   <div>
                     <p className="text-sm font-medium text-gray-700 mb-2">Recent Members</p>
                     <div className="flex -space-x-2">
-                      {department.users.slice(0, 4).map((user: any) => (
+                      {department.users.slice(0, 4).map((user) => (
                         <Avatar key={user.id} className="w-8 h-8 border-2 border-white">
                           <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
                           <AvatarFallback className="text-xs">{user.full_name?.charAt(0)}</AvatarFallback>
@@ -459,7 +465,7 @@ export default function DepartmentManagement() {
             <div>
               <h4 className="font-medium mb-2">Current Members ({selectedDepartment?.users?.length || 0})</h4>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {selectedDepartment?.users?.map((user: any) => (
+                {selectedDepartment?.users?.map((user) => (
                   <div key={user.id} className="flex items-center justify-between p-2 border rounded">
                     <div className="flex items-center space-x-2">
                       <Avatar className="w-8 h-8">
@@ -474,7 +480,7 @@ export default function DepartmentManagement() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleRemoveUser(user.id, selectedDepartment.id)}
+                      onClick={() => handleRemoveUser(user.id, selectedDepartment!.id)}
                     >
                       Remove
                     </Button>
@@ -488,7 +494,7 @@ export default function DepartmentManagement() {
               <h4 className="font-medium mb-2">Available Users</h4>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {users
-                  .filter((user) => !selectedDepartment?.users?.some((deptUser: any) => deptUser.id === user.id))
+                  .filter((user) => !selectedDepartment?.users?.some((deptUser) => deptUser.id === user.id))
                   .map((user) => (
                     <div key={user.id} className="flex items-center justify-between p-2 border rounded">
                       <div className="flex items-center space-x-2">
@@ -505,11 +511,11 @@ export default function DepartmentManagement() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleAssignUser(user.id, selectedDepartment.id, false)}
+                          onClick={() => handleAssignUser(user.id, selectedDepartment!.id, false)}
                         >
                           Add Member
                         </Button>
-                        <Button size="sm" onClick={() => handleAssignUser(user.id, selectedDepartment.id, true)}>
+                        <Button size="sm" onClick={() => handleAssignUser(user.id, selectedDepartment!.id, true)}>
                           Add Supervisor
                         </Button>
                       </div>
