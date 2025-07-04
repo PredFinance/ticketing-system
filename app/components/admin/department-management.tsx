@@ -104,7 +104,7 @@ export function AdminDepartmentManagement() {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch("/api/admin/departments", { credentials: "include" })
+      const response = await fetch("/api/departments", { credentials: "include" })
       if (response.ok) {
         const data = await response.json()
         setDepartments(data)
@@ -146,7 +146,7 @@ export function AdminDepartmentManagement() {
 
   const handleCreateDepartment = async (data: any) => {
     try {
-      const response = await fetch("/api/admin/departments", {
+      const response = await fetch("/api/departments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

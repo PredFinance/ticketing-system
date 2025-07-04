@@ -10,7 +10,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, MessageSquare, User, Calendar, Flag, Send, Paperclip, Eye, EyeOff } from "lucide-react"
+import {
+  ArrowLeft,
+  MessageSquare,
+  User,
+  Calendar,
+  Flag,
+  Send,
+  Paperclip,
+  Eye,
+  EyeOff,
+  Download,
+  FileText,
+  ImageIcon,
+  File,
+} from "lucide-react"
 import toast from "react-hot-toast"
 
 interface TicketDetail {
@@ -40,6 +54,15 @@ interface TicketDetail {
     description: string
     created_at: string
     user?: { first_name: string; last_name: string }
+  }>
+  attachments: Array<{
+    id: number
+    filename: string
+    original_filename: string
+    file_path: string
+    file_size: number
+    mime_type: string
+    created_at: string
   }>
 }
 
@@ -131,35 +154,59 @@ export default function TicketDetailPage() {
     }
   }
 
+  const downloadAttachment = (attachment: any) => {
+    // Create a download link for the attachment
+    const link = document.createElement("a")
+    link.href = `/api/attachments/${attachment.id}/download`
+    link.download = attachment.original_filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const getFileIcon = (mimeType: string) => {
+    if (mimeType.startsWith("image/")) return <ImageIcon className="w-4 h-4" />
+    if (mimeType === "application/pdf") return <FileText className="w-4 h-4" />
+    return <File className="w-4 h-4" />
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "open":
-        return "status-open"
+        return "bg-red-100 text-red-800 border-red-200"
       case "in_progress":
-        return "status-in-progress"
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
       case "pending":
-        return "status-pending"
+        return "bg-orange-100 text-orange-800 border-orange-200"
       case "resolved":
-        return "status-resolved"
+        return "bg-green-100 text-green-800 border-green-200"
       case "closed":
-        return "status-closed"
+        return "bg-gray-100 text-gray-800 border-gray-200"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "low":
-        return "priority-low"
+        return "bg-blue-100 text-blue-800 border-blue-200"
       case "medium":
-        return "priority-medium"
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
       case "high":
-        return "priority-high"
+        return "bg-orange-100 text-orange-800 border-orange-200"
       case "urgent":
-        return "priority-urgent"
+        return "bg-red-100 text-red-800 border-red-200"
       default:
-        return "bg-gray-100 text-gray-700"
+        return "bg-gray-100 text-gray-700 border-gray-200"
     }
   }
 
@@ -175,9 +222,9 @@ export default function TicketDetailPage() {
 
   if (loading || loadingTicket) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="spinner mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading ticket...</p>
         </div>
       </div>
@@ -196,22 +243,27 @@ export default function TicketDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <Button variant="ghost" onClick={() => router.back()} className="mr-4">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
-            <div className="flex items-center flex-1">
-              <h1 className="text-xl font-semibold text-gray-900">{ticket.ticket_number}</h1>
-              <Badge className={`ml-3 ${getStatusColor(ticket.status)}`}>{ticket.status.replace("_", " ")}</Badge>
-              <Badge className={`ml-2 ${getPriorityColor(ticket.priority)}`}>{ticket.priority}</Badge>
+      {/* Mobile-First Header */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center min-w-0 flex-1">
+              <Button variant="ghost" onClick={() => router.back()} className="mr-2 sm:mr-4 p-2">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <div className="flex items-center min-w-0 flex-1">
+                <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">{ticket.ticket_number}</h1>
+                <div className="flex items-center ml-2 sm:ml-3 space-x-1 sm:space-x-2">
+                  <Badge className={`text-xs ${getStatusColor(ticket.status)}`}>
+                    {ticket.status.replace("_", " ")}
+                  </Badge>
+                  <Badge className={`text-xs ${getPriorityColor(ticket.priority)}`}>{ticket.priority}</Badge>
+                </div>
+              </div>
             </div>
             {(user?.role === "admin" || user?.role === "supervisor") && (
               <Select value={ticket.status} onValueChange={updateTicketStatus}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-32 sm:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -227,15 +279,15 @@ export default function TicketDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Ticket Details */}
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle>{ticket.title}</CardTitle>
-                <CardDescription className="flex items-center space-x-4 text-sm">
+                <CardTitle className="text-lg sm:text-xl">{ticket.title}</CardTitle>
+                <CardDescription className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4 text-sm">
                   <span className="flex items-center">
                     <User className="w-4 h-4 mr-1" />
                     Created by {ticket.creator.first_name} {ticket.creator.last_name}
@@ -253,10 +305,48 @@ export default function TicketDetailPage() {
               </CardContent>
             </Card>
 
+            {/* Attachments */}
+            {ticket.attachments && ticket.attachments.length > 0 && (
+              <Card className="shadow-lg border-0">
+                <CardHeader>
+                  <CardTitle className="flex items-center text-lg">
+                    <Paperclip className="w-5 h-5 mr-2" />
+                    Attachments ({ticket.attachments.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {ticket.attachments.map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center min-w-0 flex-1">
+                          {getFileIcon(attachment.mime_type)}
+                          <div className="ml-3 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{attachment.original_filename}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(attachment.file_size)}</p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => downloadAttachment(attachment)}
+                          className="ml-2 flex-shrink-0"
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Comments Section */}
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle className="flex items-center">
+                <CardTitle className="flex items-center text-lg">
                   <MessageSquare className="w-5 h-5 mr-2" />
                   Comments ({ticket.comments.length})
                 </CardTitle>
@@ -266,17 +356,17 @@ export default function TicketDetailPage() {
                 <div className="space-y-4">
                   {ticket.comments.map((comment) => (
                     <div key={comment.id} className="flex space-x-3">
-                      <Avatar className="w-8 h-8">
+                      <Avatar className="w-8 h-8 flex-shrink-0">
                         <AvatarImage src={comment.user.avatar_url || "/placeholder.svg"} />
                         <AvatarFallback className="bg-gray-100 text-gray-600">
                           {comment.user.first_name[0]}
                           {comment.user.last_name[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 space-y-1 sm:space-y-0">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium text-gray-900">
                                 {comment.user.first_name} {comment.user.last_name}
                               </span>
@@ -307,7 +397,7 @@ export default function TicketDetailPage() {
 
                 {/* Add Comment */}
                 <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                     <h3 className="font-medium text-gray-900">Add Comment</h3>
                     {(user?.role === "admin" || user?.role === "supervisor") && (
                       <Button
@@ -327,19 +417,19 @@ export default function TicketDetailPage() {
                     onChange={(e) => setNewComment(e.target.value)}
                     className="min-h-24"
                   />
-                  <div className="flex justify-between items-center">
-                    <Button variant="outline" size="sm">
+                  <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center space-y-2 sm:space-y-0">
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto bg-transparent">
                       <Paperclip className="w-4 h-4 mr-1" />
                       Attach File
                     </Button>
                     <Button
                       onClick={submitComment}
                       disabled={!newComment.trim() || submittingComment}
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
                     >
                       {submittingComment ? (
                         <div className="flex items-center">
-                          <div className="spinner mr-2"></div>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                           Posting...
                         </div>
                       ) : (
@@ -447,10 +537,10 @@ export default function TicketDetailPage() {
                 <div className="space-y-3">
                   {ticket.activities.map((activity) => (
                     <div key={activity.id} className="flex items-start space-x-2">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full mt-2"></div>
-                      <div className="flex-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full mt-2 flex-shrink-0"></div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-900">{activity.description}</p>
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2 text-xs text-gray-500">
                           {activity.user && (
                             <span>
                               {activity.user.first_name} {activity.user.last_name}

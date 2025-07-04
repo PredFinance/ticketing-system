@@ -14,8 +14,11 @@ export async function POST(request: NextRequest) {
     const title = formData.get("title") as string
     const description = formData.get("description") as string
     const categoryId = formData.get("categoryId") as string
-    const departmentId = formData.get("departmentId") as string
     const priority = formData.get("priority") as string
+    const isPublic = formData.get("isPublic") === "true"
+
+    // Use user's department from auth context
+    const departmentId = user?.department_id
 
     if (!title || !description) {
       return NextResponse.json({ message: "Title and description are required" }, { status: 400 })
@@ -36,7 +39,8 @@ export async function POST(request: NextRequest) {
         department_id: departmentId ? Number(departmentId) : null,
         priority: priority as any,
         status: "open",
-        created_by: user!.id, // Use integer ID
+        created_by: user!.id,
+        is_public_in_department: isPublic,
       })
       .select()
       .single()
@@ -46,18 +50,66 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Failed to create ticket" }, { status: 500 })
     }
 
-    // Handle file uploads (simplified for now)
+    // Handle file uploads
     const files = formData.getAll("files") as File[]
+    const uploadedFiles = []
+
     if (files.length > 0) {
-      // TODO: Implement file upload to storage and save attachment records
-      console.log(`${files.length} files to upload for ticket ${ticketNumber}`)
+      for (const file of files) {
+        try {
+          // Generate a unique filename
+          const timestamp = Date.now()
+          const randomString = Math.random().toString(36).substring(2, 10)
+          const fileExtension = file.name.split(".").pop()
+          const uniqueFilename = `${timestamp}-${randomString}.${fileExtension}`
+
+          // Create folder path based on ticket number
+          const folderPath = `tickets/${ticketNumber}`
+          const filePath = `${folderPath}/${uniqueFilename}`
+
+          // Upload file to Supabase Storage
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from("ticket-attachments")
+            .upload(filePath, file, {
+              cacheControl: "3600",
+              upsert: false,
+            })
+
+          if (uploadError) {
+            console.error("File upload error:", uploadError)
+            continue
+          }
+
+          // Save attachment record in database
+          const { data: attachment, error: attachmentError } = await supabase
+            .from("attachments")
+            .insert({
+              ticket_id: ticket.id,
+              uploaded_by: user!.id,
+              filename: uniqueFilename,
+              original_filename: file.name,
+              file_path: filePath,
+              file_size: file.size,
+              mime_type: file.type,
+            })
+            .select()
+            .single()
+
+          if (!attachmentError) {
+            uploadedFiles.push(attachment)
+          }
+        } catch (fileError) {
+          console.error("Individual file upload error:", fileError)
+          continue
+        }
+      }
     }
 
     // Add initial system message
     await supabase.from("ticket_comments").insert({
       ticket_id: ticket.id,
       user_id: user!.id,
-      content: `Ticket created with priority: ${priority}`,
+      content: `Ticket created with priority: ${priority}${uploadedFiles.length > 0 ? ` with ${uploadedFiles.length} attachment(s)` : ""}`,
       is_system_message: true,
     })
 
@@ -72,13 +124,14 @@ export async function POST(request: NextRequest) {
       ticket_id: ticket.id,
       user_id: user!.id,
       action: "created",
-      description: "Ticket created",
+      description: `Ticket created${uploadedFiles.length > 0 ? ` with ${uploadedFiles.length} attachment(s)` : ""}`,
     })
 
     return NextResponse.json({
       ticketNumber: ticket.ticket_number,
       id: ticket.id,
       message: "Ticket created successfully",
+      attachments: uploadedFiles,
     })
   } catch (error) {
     console.error("Create ticket error:", error)

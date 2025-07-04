@@ -116,7 +116,7 @@ export function AdminUserManagement() {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch("/api/admin/departments", { credentials: "include" })
+      const response = await fetch("/api/departments", { credentials: "include" })
       if (response.ok) {
         const data = await response.json()
         setDepartments(data)

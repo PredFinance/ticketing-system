@@ -1,11 +1,7 @@
-import { requireAdmin } from "@/lib/auth"
 import { createSupabaseServerClient } from "@/lib/supabase"
 import { NextResponse } from "next/server"
 
 export async function GET() {
-  const { user, error } = await requireAdmin()
-  if (error) return error
-
   try {
     const supabase = await createSupabaseServerClient()
 
@@ -29,7 +25,6 @@ export async function GET() {
         updated_at,
         auth_user_id
       `)
-      .eq("organization_id", user!.organization_id)
       .order("created_at", { ascending: false })
 
     if (usersError) {
@@ -59,7 +54,7 @@ export async function GET() {
 
     return NextResponse.json(usersWithDepartments)
   } catch (error) {
-    console.error("Admin users API error:", error)
+    console.error("Users API error:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }

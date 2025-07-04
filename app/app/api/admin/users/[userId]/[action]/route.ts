@@ -3,9 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ userId: string; action: string }> }) {
-  const { user, error } = await requireAdmin()
-  if (error) return error
-
+ 
   try {
     const supabase = await createSupabaseServerClient()
     const { userId, action } = await params

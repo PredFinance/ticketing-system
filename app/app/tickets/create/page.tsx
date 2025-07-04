@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Ticket, Upload, X, AlertCircle, Flag, Building, Tag, ArrowLeft, FileText, ImageIcon, File } from "lucide-react"
+import { Ticket, Upload, X, AlertCircle, Flag, Tag, ArrowLeft, FileText, ImageIcon, File } from "lucide-react"
 import toast from "react-hot-toast"
+import { SuccessModal } from "@/components/success-modal"
+import { Progress } from "@/components/ui/progress"
 
 interface Category {
   id: number
@@ -33,6 +35,7 @@ interface AttachedFile {
   size: number
   type: string
   file: File
+  progress?: number
 }
 
 export default function CreateTicketPage() {
@@ -43,8 +46,8 @@ export default function CreateTicketPage() {
     title: "",
     description: "",
     categoryId: "",
-    departmentId: "",
     priority: "medium" as "low" | "medium" | "high" | "urgent",
+    isPublic: false,
   })
 
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
@@ -53,6 +56,9 @@ export default function CreateTicketPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [dragActive, setDragActive] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [createdTicketNumber, setCreatedTicketNumber] = useState("")
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -72,7 +78,7 @@ export default function CreateTicketPage() {
       }
 
       // Fetch departments
-      const departmentsResponse = await fetch("/api/admin/departments", { credentials: "include" })
+      const departmentsResponse = await fetch("/api/departments", { credentials: "include" })
       if (departmentsResponse.ok) {
         const departmentsData = await departmentsResponse.json()
         setDepartments(departmentsData)
@@ -82,7 +88,7 @@ export default function CreateTicketPage() {
     }
   }
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -117,6 +123,7 @@ export default function CreateTicketPage() {
         size: file.size,
         type: file.type,
         file: file,
+        progress: 0,
       }
 
       setAttachedFiles((prev) => [...prev, newFile])
@@ -176,6 +183,49 @@ export default function CreateTicketPage() {
     }
   }
 
+  const simulateFileUploadProgress = () => {
+    // Simulate upload progress for attached files
+    setAttachedFiles((prevFiles) =>
+      prevFiles.map((file) => ({
+        ...file,
+        progress: 0,
+      })),
+    )
+
+    let progress = 0
+    const interval = setInterval(() => {
+      progress += 5
+      setUploadProgress(progress)
+
+      // Update individual file progress
+      setAttachedFiles((prevFiles) =>
+        prevFiles.map((file) => ({
+          ...file,
+          progress: Math.min(progress, 100),
+        })),
+      )
+
+      if (progress >= 100) {
+        clearInterval(interval)
+      }
+    }, 100)
+
+    return () => clearInterval(interval)
+  }
+
+  const resetForm = () => {
+    setFormData({
+      title: "",
+      description: "",
+      categoryId: "",
+      priority: "medium",
+      isPublic: false,
+    })
+    setAttachedFiles([])
+    setError("")
+    setUploadProgress(0)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
@@ -194,12 +244,15 @@ export default function CreateTicketPage() {
     }
 
     try {
+      // Start simulating upload progress
+      const clearProgressSimulation = simulateFileUploadProgress()
+
       const submitData = new FormData()
       submitData.append("title", formData.title)
       submitData.append("description", formData.description)
       submitData.append("categoryId", formData.categoryId)
-      submitData.append("departmentId", formData.departmentId)
       submitData.append("priority", formData.priority)
+      submitData.append("isPublic", formData.isPublic ? "true" : "false")
 
       attachedFiles.forEach((attachedFile) => {
         submitData.append("files", attachedFile.file)
@@ -213,12 +266,18 @@ export default function CreateTicketPage() {
 
       if (response.ok) {
         const result = await response.json()
-        toast.success(`Ticket ${result.ticketNumber} created successfully!`)
-        router.push(`/tickets/${result.ticketNumber}`)
+        setCreatedTicketNumber(result.ticketNumber)
+
+        // Clear the progress simulation
+        clearProgressSimulation()
+
+        // Show success modal instead of toast
+        setShowSuccessModal(true)
       } else {
         const data = await response.json()
         setError(data.message || "Failed to create ticket")
         toast.error("Failed to create ticket")
+        clearProgressSimulation()
       }
     } catch (error) {
       setError("An error occurred. Please try again.")
@@ -228,11 +287,16 @@ export default function CreateTicketPage() {
     }
   }
 
+  const handleCloseSuccessModal = () => {
+    setShowSuccessModal(false)
+    resetForm()
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="spinner mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -242,7 +306,7 @@ export default function CreateTicketPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16">
             <Button variant="ghost" onClick={() => router.back()} className="mr-4">
@@ -299,58 +363,35 @@ export default function CreateTicketPage() {
                 />
               </div>
 
-              {/* Category and Department */}
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="category" className="text-sm font-medium text-gray-700">
-                    Category
-                  </Label>
-                  <div className="relative">
-                    <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-20 pointer-events-none" />
-                    <Select onValueChange={(value) => handleInputChange("categoryId", value)} disabled={submitting}>
-                      <SelectTrigger className="pl-10 h-12 rounded-xl border-gray-200 focus:border-purple-500 focus:ring-purple-500">
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id.toString()}>
-                            <div className="flex items-center">
-                              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                              {category.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="department" className="text-sm font-medium text-gray-700">
-                    Department
-                  </Label>
-                  <div className="relative">
-                    <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-20 pointer-events-none" />
-                    <Select onValueChange={(value) => handleInputChange("departmentId", value)} disabled={submitting}>
-                      <SelectTrigger className="pl-10 h-12 rounded-xl border-gray-200 focus:border-purple-500 focus:ring-purple-500">
-                        <SelectValue placeholder="Select a department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id.toString()}>
-                            {dept.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {/* Category */}
+              <div className="space-y-2">
+                <Label htmlFor="category" className="text-sm font-medium text-gray-700">
+                  Category
+                </Label>
+                <div className="relative">
+                  <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-20 pointer-events-none" />
+                  <Select onValueChange={(value) => handleInputChange("categoryId", value)} disabled={submitting}>
+                    <SelectTrigger className="pl-10 h-12 rounded-xl border-gray-200 focus:border-purple-500 focus:ring-purple-500">
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
+                            {category.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               {/* Priority */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">Priority</Label>
-                <div className="flex gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {(["low", "medium", "high", "urgent"] as const).map((priority) => (
                     <button
                       key={priority}
@@ -384,6 +425,37 @@ export default function CreateTicketPage() {
                   required
                   disabled={submitting}
                 />
+              </div>
+
+              {/* Ticket Visibility */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">Ticket Visibility</Label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="visibility"
+                      value="private"
+                      checked={!formData.isPublic}
+                      onChange={() => handleInputChange("isPublic", false)}
+                      disabled={submitting}
+                      className="text-purple-600 focus:ring-purple-500"
+                    />
+                    Private
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="visibility"
+                      value="public"
+                      checked={formData.isPublic}
+                      onChange={() => handleInputChange("isPublic", true)}
+                      disabled={submitting}
+                      className="text-purple-600 focus:ring-purple-500"
+                    />
+                    Public
+                  </label>
+                </div>
               </div>
 
               {/* File Upload */}
@@ -424,24 +496,36 @@ export default function CreateTicketPage() {
                     <Label className="text-sm font-medium text-gray-700">Attached Files ({attachedFiles.length})</Label>
                     <div className="space-y-2">
                       {attachedFiles.map((file) => (
-                        <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center">
+                        <div
+                          key={file.id}
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg"
+                        >
+                          <div className="flex items-center mb-2 sm:mb-0">
                             {getFileIcon(file.type)}
                             <div className="ml-3">
-                              <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                              <p className="text-sm font-medium text-gray-900 truncate max-w-[200px] sm:max-w-[300px]">
+                                {file.name}
+                              </p>
                               <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
                             </div>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFile(file.id)}
-                            disabled={submitting}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
+                          <div className="flex items-center w-full sm:w-auto">
+                            {submitting && typeof file.progress === "number" && (
+                              <div className="w-full sm:w-24 mr-2">
+                                <Progress value={file.progress} className="h-2" />
+                              </div>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeFile(file.id)}
+                              disabled={submitting}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -454,11 +538,11 @@ export default function CreateTicketPage() {
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="btn-3d bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-medium"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-medium transition-all hover:shadow-lg"
                 >
                   {submitting ? (
                     <div className="flex items-center">
-                      <div className="spinner mr-2"></div>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Creating Ticket...
                     </div>
                   ) : (
@@ -473,6 +557,9 @@ export default function CreateTicketPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Success Modal */}
+      <SuccessModal isOpen={showSuccessModal} onClose={handleCloseSuccessModal} ticketNumber={createdTicketNumber} />
     </div>
   )
 }

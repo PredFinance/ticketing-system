@@ -43,7 +43,7 @@ export default function RegisterPage() {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch("/api/admin/departments")
+      const response = await fetch("/api/departments")
       if (response.ok) {
         const data = await response.json()
         setDepartments(data)
