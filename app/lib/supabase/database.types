@@ -1,0 +1,152 @@
+export type Database = {
+  public: {
+    Tables: {
+      organizations: {
+        Row: {
+          id: number
+          name: string
+          slug: string
+          logo_url: string | null
+          admin_email: string
+          admin_name: string
+          phone: string | null
+          address: string | null
+          is_active: boolean
+          onboarding_completed: boolean
+          settings: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          slug: string
+          admin_email: string
+          admin_name: string
+          phone?: string | null
+          address?: string | null
+          logo_url?: string | null
+          is_active?: boolean
+          onboarding_completed?: boolean
+          settings?: any
+        }
+        Update: {
+          name?: string
+          slug?: string
+          admin_email?: string
+          admin_name?: string
+          phone?: string | null
+          address?: string | null
+          logo_url?: string | null
+          is_active?: boolean
+          onboarding_completed?: boolean
+          settings?: any
+        }
+      }
+      user_profiles: {
+        Row: {
+          id: number
+          auth_id: string
+          organization_id: number
+          email: string
+          full_name: string
+          avatar_url: string | null
+          phone: string | null
+          role: 'admin' | 'supervisor' | 'user'
+          is_approved: boolean
+          approved_by: number | null
+          approved_at: string | null
+          last_login: string | null
+          is_online: boolean
+          settings: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          auth_id: string
+          organization_id: number
+          email: string
+          full_name: string
+          avatar_url?: string | null
+          phone?: string | null
+          role?: 'admin' | 'supervisor' | 'user'
+          is_approved?: boolean
+          approved_by?: number | null
+          approved_at?: string | null
+          last_login?: string | null
+          is_online?: boolean
+          settings?: any
+        }
+        Update: {
+          organization_id?: number
+          email?: string
+          full_name?: string
+          avatar_url?: string | null
+          phone?: string | null
+          role?: 'admin' | 'supervisor' | 'user'
+          is_approved?: boolean
+          approved_by?: number | null
+          approved_at?: string | null
+          last_login?: string | null
+          is_online?: boolean
+          settings?: any
+        }
+      }
+      tickets: {
+        Row: {
+          id: number
+          ticket_number: string
+          organization_id: number
+          department_id: number
+          category_id: number | null
+          created_by: number
+          assigned_to: number | null
+          assigned_by: number | null
+          title: string
+          description: string
+          priority: 'low' | 'medium' | 'high' | 'critical'
+          status: 'open' | 'in_progress' | 'resolved' | 'closed' | 'reserved'
+          visibility: 'public' | 'private'
+          tags: string[] | null
+          due_date: string | null
+          resolved_at: string | null
+          closed_at: string | null
+          metadata: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: number
+          department_id: number
+          category_id?: number | null
+          created_by: number
+          assigned_to?: number | null
+          assigned_by?: number | null
+          title: string
+          description: string
+          priority?: 'low' | 'medium' | 'high' | 'critical'
+          status?: 'open' | 'in_progress' | 'resolved' | 'closed' | 'reserved'
+          visibility?: 'public' | 'private'
+          tags?: string[] | null
+          due_date?: string | null
+          metadata?: any
+        }
+        Update: {
+          department_id?: number
+          category_id?: number | null
+          assigned_to?: number | null
+          assigned_by?: number | null
+          title?: string
+          description?: string
+          priority?: 'low' | 'medium' | 'high' | 'critical'
+          status?: 'open' | 'in_progress' | 'resolved' | 'closed' | 'reserved'
+          visibility?: 'public' | 'private'
+          tags?: string[] | null
+          due_date?: string | null
+          resolved_at?: string | null
+          closed_at?: string | null
+          metadata?: any
+        }
+      }
+    }
+  }
+}
