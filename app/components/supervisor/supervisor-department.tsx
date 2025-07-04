@@ -112,7 +112,7 @@ export default function SupervisorDepartment() {
             created_at
           )
         `)
-        .eq("department_id", dept.id)
+        .eq("department_id", dept[0].id)
 
       if (membersError) throw membersError
 
@@ -140,7 +140,7 @@ export default function SupervisorDepartment() {
             color
           )
         `)
-        .eq("department_id", dept.id)
+        .eq("department_id", dept[0].id)
         .order("created_at", { ascending: false })
 
       if (ticketsError) throw ticketsError
